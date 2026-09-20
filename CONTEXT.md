@@ -22,12 +22,16 @@ _Avoid_: merge, overlay
 One resting price on one side of the book, with its size and order count (`n`).
 _Avoid_: row (that is a ladder concept), order
 
-**Tick**:
-The smallest price increment for a coin at the current precision. Prices are held internally as integer tick counts.
-_Avoid_: pip, step
+**Raw tick**:
+The exchange's smallest price increment for a coin (`10^-(D - szDecimals)`). The engine holds every price as an integer count of raw ticks.
+_Avoid_: tick (alone), pip, step
+
+**Grid tick**:
+The row spacing of the ladder at the current precision: derived from the mid price, `nSigFigs`, and mantissa. A presentation quantity; changes when price magnitude crosses a power of ten.
+_Avoid_: bucket size, grouping
 
 **Precision**:
-The `nSigFigs` setting that controls how many significant figures the feed rounds prices to. Changing it changes the tick.
+The `nSigFigs` setting that controls how many significant figures the feed rounds prices to. Changing it changes the grid tick, never the raw tick.
 _Avoid_: grouping, aggregation, decimals
 
 **Trade**:
@@ -47,8 +51,11 @@ _Avoid_: store, reducer, state
 The comparison of a new book push against the previous one, producing lifecycle events per level.
 
 **Lifecycle event**:
-What the diff says happened to a level: added, grew, shrank, vanished, consumed (shrank or vanished at a price where a trade occurred), cancelled (shrank or vanished with no trade there).
+What the diff says happened to a level: added, grew, shrank, vanished, or out-of-window (left because the visible window moved, not because liquidity left). Every decrease carries a consumed part (matched to trades at that price in the interval) and a cancelled part (the remainder); the split is a temporal heuristic, never a proven cause.
 _Avoid_: update, change
+
+**Historical trades**:
+The backlog of past trades Hyperliquid sends on `trades` subscription. Excluded from lifecycle joins and fill markers.
 
 **Persistence**:
 How long a level has rested unchanged at its price.
