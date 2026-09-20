@@ -31,7 +31,7 @@ The row spacing of the ladder at the current precision: derived from the mid pri
 _Avoid_: bucket size, grouping
 
 **Precision**:
-The `nSigFigs` and mantissa pair the widget subscribes with; the feed rounds prices to it server-side. Changing it changes the grid tick, never the raw tick, and starts persistence fresh.
+The `nSigFigs` and mantissa pair the widget subscribes with; the feed rounds prices to it server-side. Selected indirectly through grouping. Changing it changes the grid tick, never the raw tick, and starts persistence fresh.
 _Avoid_: grouping, aggregation, decimals
 
 **Trade**:
@@ -106,8 +106,33 @@ The cumulative-size stair-step drawn behind the ladder, one side warm, one cool.
 **Depth ruler**:
 A horizontal marker at a fixed distance from mid, labelled with cumulative volume to that point; rows beyond it are dimmed.
 
-**Microprice ribbon**:
-The spread row: mid, microprice, spread, and top-of-book imbalance drawn together.
+**Ribbon**:
+The row drawn at the bid/ask boundary: mid, spread, the share bar, and the last trade. Reads BBO and trades only, never the grouped book; it is a readout, never a control.
+_Avoid_: microprice ribbon, spread row, mid row
+
+**Share bar**:
+The ribbon's single bar split at the bid share (`bidSize / (bidSize + askSize)`). The divider's position is the microprice; the split is the imbalance.
+_Avoid_: imbalance bar, µ marker
+
+**Grouping**:
+The user-facing row step of the ladder, offered as five per-coin derived ticks labelled by that step ($1, $2, $5, …). Each option maps to one server precision; changing it resubscribes both books.
+_Avoid_: precision (that is the server parameter), aggregation
+
+**Trails**:
+The optional per-row strip showing a level's size history over the last 12 seconds.
+_Avoid_: history column, heat strip
+
+**Tape**:
+The optional column of recent trades, newest first, aggregated per block, price, and side.
+_Avoid_: trades feed, prints list
+
+**Top bar**:
+The widget's control strip: market, grouping, view, panel toggles, connection state, pause, settings. Sourced from REST and adapter state; the only place that writes widget state.
+_Avoid_: header, toolbar
+
+**Spine view**:
+The alternate ladder layout with prices on a central column and bids and asks growing outward.
+_Avoid_: mirrored view, centre view
 
 **Fill marker**:
 The pulse drawn at a ladder row when a trade hits that price.

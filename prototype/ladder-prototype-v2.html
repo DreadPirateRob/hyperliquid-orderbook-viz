@@ -1,0 +1,331 @@
+<!doctype html>
+<!--
+  PROTOTYPE v2 — throwaway. Ticket 05, second round.
+  ?view=ladder|spine   ?ribbon=1|2|3   ?trails=1   ?metrics=1   ?fps=60|30|update   ?coin=BTC   ?g=<tick>
+  Ladder = v1 variant A unchanged in body; spine = v1 variant B; trails = v1 variant C folded in as an expandable column.
+  Grouping options are derived from the coin's price and labelled by the resulting row step.
+-->
+<html lang="en"><head><meta charset="utf-8"><title>ladder prototype v2</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0e11;color:#e5e7eb;font:12px/1.3 ui-monospace,Menlo,monospace;overflow:hidden}
+  canvas{display:block;position:absolute;inset:0}
+  #bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);background:#fff;color:#111;border-radius:999px;padding:6px 12px;display:flex;gap:8px;align-items:center;box-shadow:0 4px 18px #0009;z-index:9;font-weight:600;font-size:11px}
+  #bar select,#bar button{border:1px solid #ccc;border-radius:6px;padding:2px 6px;font:inherit;background:#fff;cursor:pointer}
+  #bar button.on{background:#111;color:#fff;border-color:#111}
+  #top{position:fixed;top:10px;right:var(--top-right,10px);z-index:8;display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  #mbtn{background:#161b22;color:#9ca3af;border:1px solid #2a3340;border-radius:6px;padding:4px 8px;font:inherit;cursor:pointer}
+  #mbtn.on{color:#e5e7eb;border-color:#60a5fa}
+  #hud{background:#0f1319ee;border:1px solid #2a3340;padding:8px 10px;border-radius:6px;white-space:pre;color:#9ca3af;font-size:11px;display:none}
+  #hud.on{display:block}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="top"><button id="mbtn">metrics</button><div id="hud"></div></div>
+<div id="bar">
+  <label>view <select id="view"><option value="ladder">ladder</option><option value="spine">centre spine</option></select></label>
+  <label>ribbon <select id="ribbon"><option value="1">1 own row</option><option value="2">2 edge + pill</option><option value="3">3 side panel</option></select></label>
+  <button id="trails">trails</button>
+  <button id="tape">tape</button>
+  <label>group <select id="group"></select></label>
+  <label>render <select id="fps"><option value="60">60 fps</option><option value="30">30 fps</option><option value="update">on-update</option></select></label>
+</div>
+<script>
+// ───────────── params / controls ─────────────
+const P = new URLSearchParams(location.search);
+const setParam = (k, v) => { const u = new URL(location); v ? u.searchParams.set(k, v) : u.searchParams.delete(k); history.replaceState(null, '', u); };
+const coin = P.get('coin') || 'BTC';
+let view = P.get('view') === 'spine' ? 'spine' : 'ladder';
+let ribbonV = ['1', '2', '3'].includes(P.get('ribbon')) ? +P.get('ribbon') : 1;
+let trailsOn = P.get('trails') === '1';
+let tapeOn = P.get('tape') === '1';
+const TAPE_W = 200;                                  // fixed right-hand column when on
+let metricsOn = P.get('metrics') === '1';
+let fpsMode = P.get('fps') || '60';
+let groupSel = P.get('g') || '';                 // tick value as string; '' = default (finest sig option)
+const $ = id => document.getElementById(id);
+$('view').value = view; $('view').onchange = e => { view = e.target.value; setParam('view', view); };
+$('ribbon').value = ribbonV; $('ribbon').onchange = e => { ribbonV = +e.target.value; setParam('ribbon', ribbonV); };
+$('trails').classList.toggle('on', trailsOn); $('trails').onclick = () => { trailsOn = !trailsOn; $('trails').classList.toggle('on', trailsOn); setParam('trails', trailsOn ? '1' : ''); };
+const placeTop = () => document.getElementById('top').style.setProperty('--top-right', (tapeOn ? TAPE_W + 10 : 10) + 'px'); placeTop();
+$('tape').classList.toggle('on', tapeOn); $('tape').onclick = () => { tapeOn = !tapeOn; placeTop(); $('tape').classList.toggle('on', tapeOn); setParam('tape', tapeOn ? '1' : ''); };
+$('mbtn').classList.toggle('on', metricsOn); $('hud').classList.toggle('on', metricsOn);
+$('mbtn').onclick = () => { metricsOn = !metricsOn; $('mbtn').classList.toggle('on', metricsOn); $('hud').classList.toggle('on', metricsOn); setParam('metrics', metricsOn ? '1' : ''); };
+$('fps').value = fpsMode; $('fps').onchange = e => { fpsMode = e.target.value; setParam('fps', fpsMode); };
+$('group').onchange = e => { groupSel = e.target.value; setParam('g', groupSel); applyGrouping(); };
+addEventListener('keydown', e => { if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  if (e.key === 'v') { view = view === 'ladder' ? 'spine' : 'ladder'; $('view').value = view; setParam('view', view); }
+  if (e.key === 't') $('trails').click(); if (e.key === 'm') $('mbtn').click(); if (e.key === 'p') $('tape').click();
+  if (/[123]/.test(e.key)) { ribbonV = +e.key; $('ribbon').value = ribbonV; setParam('ribbon', ribbonV); } });
+
+// ───────────── palette ─────────────
+const C = { bg: '#0b0e11', text: '#e5e7eb', dim: '#6b7280', bid: [45, 212, 191], ask: [251, 113, 133], hot: [251, 191, 36], mid: [96, 165, 250] };
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+// ───────────── grouping: derived tick options ─────────────
+let szDecimals = 5, rawTick = 0.1, gridTick = 1, groupOpts = [], activeOpt = null, lastMag = null;
+const CANDIDATES = [{ N: 5 }, { N: 5, m: 2 }, { N: 5, m: 5 }, { N: 4 }, { N: 3 }];
+const tickFor = (Pmid, N, m) => Math.max(rawTick, (m || 1) * Math.pow(10, Math.floor(Math.log10(Pmid)) - N + 1));
+const fmtTick = t => t >= 1 ? '$' + (t % 1 ? t.toFixed(2) : t) : '$' + t.toFixed(Math.max(1, -Math.floor(Math.log10(t) + 1e-9)));
+function deriveGroupOpts(Pmid) {
+  const seen = new Map();
+  for (const c of CANDIDATES) { const t = +tickFor(Pmid, c.N, c.m).toPrecision(12); if (!seen.has(t)) seen.set(t, { ...c, tick: t, label: fmtTick(t) }); }
+  groupOpts = [...seen.values()].sort((a, b) => a.tick - b.tick);
+  $('group').innerHTML = groupOpts.map(o => `<option value="${o.tick}">${o.label}</option>`).join('');
+  const want = groupOpts.find(o => String(o.tick) === groupSel) || groupOpts[0];
+  $('group').value = want.tick; return want;
+}
+function applyGrouping() { const opt = deriveGroupOpts(lastMid || 1); if (!activeOpt || opt.N !== activeOpt.N || opt.m !== activeOpt.m) { activeOpt = opt; gridTick = opt.tick; resubscribe(); } else { activeOpt = opt; gridTick = opt.tick; } }
+
+// ───────────── engine (floats; throwaway) ─────────────
+const book = { bid: new Map(), ask: new Map() }, hist = new Map(), recent = [], ev = [];
+const stat = { slow: 0, fast: 0, bbo: 0, trades: 0, lastSlow: 0, lastFast: 0, state: 'CONNECTING', events: 0, resync: 0, gridChanged: 0, last: null, lastDir: 0 };
+let version = 0, firstTrades = true, lastMid = 0;
+const key = (s, px) => s + ':' + px, now = () => performance.now();
+function rec(s, px) { let r = hist.get(key(s, px)); if (!r) { r = { side: s, px, firstSeen: now(), lastChanged: now(), size: 0, shown: new Spring(0), prev: 0, consumed: 0, cancelled: 0, pulses: [], trail: [] }; hist.set(key(s, px), r); } return r; }
+function pulse(r, type) { r.pulses.push({ type, t0: now() }); if (r.pulses.length > 6) r.pulses.shift(); stat.events++; ev.push(type); if (ev.length > 200) ev.shift(); }
+function tradesAt(side, px, t0, t1) { let v = 0; for (const t of recent) if (t.px === px && t.rx > t0 && t.rx <= t1 && ((side === 'ask') === (t.side === 'B'))) v += t.sz; return v; }
+function applyLevels(side, levels, stream, t) {
+  const m = book[side], prevT = stream === 'fast' ? stat.lastFast : stat.lastSlow;
+  const incoming = new Map(levels.map(l => [+l.px, { sz: +l.sz, n: l.n }]));
+  let lo = Infinity, hi = -Infinity; for (const px of incoming.keys()) { lo = Math.min(lo, px); hi = Math.max(hi, px); }
+  for (const [px, cur] of m) {
+    if (!(stream === 'slow' || (px >= lo && px <= hi))) continue;
+    const nx = incoming.get(px);
+    if (!nx) { const r = rec(side, px); r.prev = cur.sz; r.size = 0; r.shown.target = 0; r.lastChanged = t; const c = Math.min(cur.sz, tradesAt(side, px, prevT, t)); r.consumed += c; r.cancelled += cur.sz - c; pulse(r, c > 0 ? 'consumed' : 'vanished'); m.delete(px); }
+    else if (nx.sz < cur.sz) { const r = rec(side, px); r.prev = cur.sz; r.size = nx.sz; r.shown.target = nx.sz; r.lastChanged = t; const d = cur.sz - nx.sz, c = Math.min(d, tradesAt(side, px, prevT, t)); r.consumed += c; r.cancelled += d - c; pulse(r, c > 0 ? 'consumed' : 'shrank'); m.set(px, nx); }
+    else if (nx.sz > cur.sz) { const r = rec(side, px); r.prev = cur.sz; r.size = nx.sz; r.shown.target = nx.sz; r.lastChanged = t; pulse(r, 'grew'); m.set(px, nx); }
+  }
+  for (const [px, nx] of incoming) if (!m.has(px)) { const r = rec(side, px); if (r.size === 0 && r.shown.x < 1e-9) r.firstSeen = t; r.size = nx.sz; r.shown.target = nx.sz; r.lastChanged = t; pulse(r, 'added'); m.set(px, nx); }
+  version++;
+}
+function applyBook(d, t) {
+  const stream = d.fast ? 'fast' : 'slow';
+  applyLevels('bid', d.levels[0], stream, t); applyLevels('ask', d.levels[1], stream, t);
+  if (stream === 'fast') { stat.fast++; stat.lastFast = t; } else { stat.slow++; stat.lastSlow = t; }
+  stat.state = 'LIVE';
+  const b = best('bid'), a = best('ask'); if (b && a) { lastMid = (b + a) / 2; const mag = Math.floor(Math.log10(lastMid)); if (mag !== lastMag) { lastMag = mag; const opt = deriveGroupOpts(lastMid); if (activeOpt && opt.tick !== gridTick) stat.gridChanged++; activeOpt = opt; gridTick = opt.tick; } }
+}
+const bbo = { b: null, a: null };                                          // BBO owns the best level (window authority); raw precision
+const onGrid = px => Math.abs(px / gridTick - Math.round(px / gridTick)) < 1e-9;
+function applyBbo(d, t) { stat.bbo++; const [b, a] = d.bbo;
+  if (b) { bbo.b = { px: +b.px, sz: +b.sz, n: b.n }; if (onGrid(+b.px)) { for (const px of [...book.bid.keys()]) if (px > +b.px) book.bid.delete(px); const cur = book.bid.get(+b.px); if (!cur || cur.sz !== +b.sz) applyLevels('bid', [b], 'fast', t); } }
+  if (a) { bbo.a = { px: +a.px, sz: +a.sz, n: a.n }; if (onGrid(+a.px)) { for (const px of [...book.ask.keys()]) if (px < +a.px) book.ask.delete(px); const cur = book.ask.get(+a.px); if (!cur || cur.sz !== +a.sz) applyLevels('ask', [a], 'fast', t); } } }
+const tape = [];                                     // aggregated prints, newest first: {px, sz, side, n, time, rx, dir}
+const TAPE_CAP = 50; let tapeSizes = [];             // recent print sizes for the outlier threshold (P95 over last ~5 min)
+function applyTrades(arr, t) { if (firstTrades) { firstTrades = false; return; }
+  for (const x of arr) { recent.push({ px: +x.px, sz: +x.sz, side: x.side, rx: t }); stat.trades++; pulse(rec(x.side === 'B' ? 'ask' : 'bid', +x.px), 'fill');
+    if (stat.last !== null && +x.px !== stat.last) stat.lastDir = +x.px > stat.last ? 1 : -1; stat.last = +x.px;
+    const head = tape[0];
+    if (head && head.time === x.time && head.px === +x.px && head.side === x.side) { head.sz += +x.sz; head.n++; head.rx = t; }   // same block / price / side → one row
+    else { tape.unshift({ px: +x.px, sz: +x.sz, side: x.side, n: 1, time: x.time, rx: t, dir: stat.lastDir }); if (tape.length > TAPE_CAP) tape.pop(); }
+    tapeSizes.push({ sz: +x.sz, rx: t }); }
+  while (tapeSizes.length && tapeSizes[0].rx < t - 300000) tapeSizes.shift();
+  while (recent.length && recent[0].rx < t - 15000) recent.shift(); }
+function tapeP95() { if (tapeSizes.length < 20) return Infinity; const s = tapeSizes.map(x => x.sz).sort((a, b) => a - b); return s[Math.floor(0.95 * (s.length - 1))]; }
+function drawTape(S) {
+  const x0 = innerWidth - TAPE_W, t = S.t, p95 = tapeP95(); let maxSz = 0; for (const r of tape) maxSz = Math.max(maxSz, r.sz);
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(x0, 0, TAPE_W, innerHeight); ctx.fillStyle = '#ffffff18'; ctx.fillRect(x0, 0, 1, innerHeight);
+  const cA = x0 + 10, cP = x0 + 44, cS = x0 + TAPE_W - 10;                 // column anchors shared by header and rows
+  text('age', cA, 12, C.dim, 'left', 9, true); text('price', cP + 14, 12, C.dim, 'left', 9, true); text('size', cS, 12, C.dim, 'right', 9, true);
+  const rowH = 18; let y = 24;
+  for (const r of tape) { if (y > innerHeight - rowH) break;
+    const age = (t - r.rx) / 1000, c = r.side === 'B' ? C.bid : C.ask, hot = r.sz >= p95, fade = Math.max(0.35, 1 - age / 60), enter = decay(t - r.rx, 350);
+    ctx.globalAlpha = fade;
+    if (enter > 0.02) { ctx.fillStyle = rgba(hot ? C.hot : c, 0.35 * enter); ctx.fillRect(x0 + 1, y, TAPE_W - 1, rowH); }
+    ctx.fillStyle = rgba(hot ? C.hot : c, 0.18 + 0.25 * (r.sz / (maxSz || 1))); ctx.fillRect(x0 + TAPE_W - 8 - 60 * (r.sz / (maxSz || 1)), y + 4, 60 * (r.sz / (maxSz || 1)), rowH - 8);
+    text(age < 1 ? 'now' : age < 60 ? age.toFixed(0) + 's' : (age / 60).toFixed(0) + 'm', cA, y + rowH / 2, C.dim, 'left', 10);
+    text(`${r.dir > 0 ? '▲' : r.dir < 0 ? '▼' : ' '} ${r.px.toFixed(S.rawDec)}`, cP, y + rowH / 2, rgba(hot ? C.hot : c, 1), 'left', 11, hot);
+    text(fmtSz(r.sz) + (r.n > 1 ? ` ×${r.n}` : ''), cS, y + rowH / 2, hot ? rgba(C.hot, 1) : C.text, 'right', 11, hot);
+    ctx.globalAlpha = 1; y += rowH; }
+}
+const best = s => { let b; for (const px of book[s].keys()) b = b === undefined ? px : (s === 'bid' ? Math.max(b, px) : Math.min(b, px)); return b; };
+
+// ───────────── feed ─────────────
+let ws, subs = [];
+function subObj(fast) { const o = { type: 'l2Book', coin, fast }; if (activeOpt) { o.nSigFigs = activeOpt.N; if (activeOpt.m) o.mantissa = activeOpt.m; } return o; }
+function resubscribe() { if (!ws || ws.readyState !== 1) return;
+  for (const s of subs) ws.send(JSON.stringify({ method: 'unsubscribe', subscription: s }));
+  book.bid.clear(); book.ask.clear(); hist.clear(); bbo.b = bbo.a = null; stat.state = "RESYNCING"; stat.resync++; version++;
+  subs = [subObj(false), subObj(true)]; for (const s of subs) ws.send(JSON.stringify({ method: 'subscribe', subscription: s })); }
+function connect() { ws = new WebSocket('wss://api.hyperliquid.xyz/ws'); stat.state = 'CONNECTING';
+  ws.onopen = () => { stat.state = 'SUBSCRIBING'; subs = [subObj(false), subObj(true)];
+    for (const s of [...subs, { type: 'bbo', coin }, { type: 'trades', coin }]) ws.send(JSON.stringify({ method: 'subscribe', subscription: s }));
+    setInterval(() => ws.readyState === 1 && ws.send('{"method":"ping"}'), 50000); };
+  ws.onmessage = e => { const m = JSON.parse(e.data), t = now(); if (m.channel === 'l2Book') applyBook(m.data, t); else if (m.channel === 'bbo') applyBbo(m.data, t); else if (m.channel === 'trades') applyTrades(m.data, t); };
+  ws.onclose = () => { stat.state = 'DISCONNECTED'; setTimeout(connect, 1500); }; }
+// bootstrap: meta → mid (allMids) → derive grouping → connect with the right precision from the start
+(async () => {
+  try { const meta = await (await fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'meta' }) })).json();
+    const u = meta.universe.find(x => x.name === coin); if (u) { szDecimals = u.szDecimals; rawTick = Math.pow(10, -(6 - szDecimals)); }
+    const mids = await (await fetch('https://api.hyperliquid.xyz/info', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'allMids' }) })).json();
+    lastMid = +mids[coin] || 1; lastMag = Math.floor(Math.log10(lastMid)); } catch { lastMid = lastMid || 1; }
+  activeOpt = deriveGroupOpts(lastMid); gridTick = activeOpt.tick; connect();
+})();
+
+// ───────────── animation ─────────────
+function Spring(x, k = 180, c = 24) { this.x = x; this.v = 0; this.target = x; this.k = k; this.c = c; }
+Spring.prototype.step = function (dt) { const a = this.k * (this.target - this.x) - this.c * this.v; this.v += a * dt; this.x += this.v * dt; if (Math.abs(this.x - this.target) < 1e-6 && Math.abs(this.v) < 1e-6) { this.x = this.target; this.v = 0; } return this.x; };
+const decay = (age, tau) => Math.exp(-age / tau);
+const anchor = new Spring(0, 40, 13); let anchorInit = false;
+const ROW = 22, TRAIL_MS = 12000, TRAIL_DT = 250; let lastTrail = 0;
+const ribH = () => ribbonV === 1 ? 36 : 0;
+
+// ───────────── presentation sampling ─────────────
+function sample(dt) {
+  const t = now(), gb = best('bid'), ga = best('ask'); if (gb === undefined || ga === undefined) return null;
+  const b = bbo.b?.px ?? gb, a = bbo.a?.px ?? ga;                          // true best from BBO; grouped bests only place the ladder rows
+  const mid = (b + a) / 2; if (!anchorInit) { anchor.x = anchor.target = mid; anchorInit = true; }
+  const rows = Math.floor((innerHeight - ribH()) / ROW), half = Math.floor(rows / 2);
+  if (Math.abs(mid - anchor.target) > gridTick * half * 0.3) anchor.target = mid;
+  const centre = anchor.step(dt);
+  if (t - lastTrail > TRAIL_DT) { lastTrail = t; for (const r of hist.values()) { r.trail.push({ t, sz: r.size }); while (r.trail.length && r.trail[0].t < t - TRAIL_MS) r.trail.shift(); } }
+  for (const r of hist.values()) { r.shown.step(dt); r.pulses = r.pulses.filter(p => t - p.t0 < 1500); if (r.size === 0 && t - r.lastChanged > 60000 && !r.pulses.length) hist.delete(key(r.side, r.px)); }
+  const out = []; let y = 0, ribY = null, maxSz = 0, cumB = 0, cumA = 0;
+  const dec = Math.max(0, -Math.floor(Math.log10(gridTick) + 1e-9));
+  for (let i = 0; i < rows; i++) {
+    const px = +(Math.round(centre / gridTick) * gridTick + (half - i) * gridTick).toFixed(dec);
+    const side = px >= a ? 'ask' : px <= b ? 'bid' : 'spread';
+    if (ribY === null && px < mid) { ribY = y; y += ribH(); }
+    const r = side === 'spread' ? null : hist.get(key(side, px));
+    out.push({ i, y, px, side, r, shown: r ? r.shown.x : 0, live: r ? r.size : 0, empty: !r || (r.shown.x < 1e-6 && !r.pulses.length) }); y += ROW;
+  }
+  if (ribY === null) ribY = y;
+  const RULER = 12; const midIdx = out.findIndex(x => x.px < mid);
+  for (const x of out) { x.inRuler = Math.abs(x.i - (midIdx - 0.5)) <= RULER; if (x.inRuler) maxSz = Math.max(maxSz, x.shown); }
+  for (const x of out) if (x.side === 'bid') { cumB += x.shown; x.cum = cumB; }
+  for (let i = out.length - 1; i >= 0; i--) { const x = out[i]; if (x.side === 'ask') { cumA += x.shown; x.cum = cumA; } }   // from best ask outward = upward
+  let maxCum = 0; for (const x of out) if (x.inRuler && x.cum) maxCum = Math.max(maxCum, x.cum);
+  const bb = bbo.b ?? book.bid.get(gb), aa = bbo.a ?? book.ask.get(ga);
+  const share = bb && aa ? bb.sz / (bb.sz + aa.sz) : 0.5;                 // bid share = microprice position
+  const micro = b + share * (a - b);
+  const rawDec = Math.max(0, -Math.floor(Math.log10(rawTick) + 1e-9));
+  const rulerY = [out[Math.max(0, midIdx - RULER)]?.y ?? 0, (out[Math.min(out.length - 1, midIdx + RULER - 1)]?.y ?? innerHeight) + ROW];
+  return { t, rows: out, mid, micro, b, a, share, imb: 2 * share - 1, bb, aa, maxSz: maxSz || 1, maxCum: maxCum || 1, ribY, rulerY, midIdx, dec, rawDec };
+}
+
+// ───────────── draw helpers ─────────────
+const cv = $('c'), ctx = cv.getContext('2d', { desynchronized: true });
+function resize() { const d = devicePixelRatio || 1; cv.width = innerWidth * d; cv.height = innerHeight * d; cv.style.width = innerWidth + "px"; cv.style.height = innerHeight + "px"; ctx.setTransform(d, 0, 0, d, 0, 0); } addEventListener('resize', resize); resize();
+const fmtPx = (px, S) => px.toFixed(S.dec);
+const fmtMid = (S) => S.mid.toFixed(Math.abs(S.mid / rawTick - Math.round(S.mid / rawTick)) > 1e-9 ? S.rawDec + 1 : S.rawDec);
+const fmtSz = sz => sz >= 1000 ? (sz / 1000).toFixed(1) + 'k' : sz.toFixed(sz < 10 ? 3 : 1);
+const sideC = s => s === 'bid' ? C.bid : C.ask;
+const persistence = r => r ? Math.min(1, (now() - r.firstSeen) / 20000) : 0;
+function pulseState(r) { const o = { flash: 0, ghost: 0, fill: 0, add: 0 }; if (!r) return o; const t = now();
+  for (const p of r.pulses) { const age = t - p.t0; if (p.type === 'fill' || p.type === 'consumed') o.fill = Math.max(o.fill, decay(age, 500)); else if (p.type === 'vanished' || p.type === 'shrank') o.ghost = Math.max(o.ghost, decay(age, 700)); else if (p.type === 'added') o.add = Math.max(o.add, decay(age, 450)); else if (p.type === 'grew') o.flash = Math.max(o.flash, decay(age, 400)); } return o; }
+function heatColour(row, S) { const c = sideC(row.side), sat = 0.35 + 0.65 * persistence(row.r), rel = row.shown / S.maxSz; const hot = rel > 0.85 ? (rel - 0.85) / 0.15 : 0; return { c: hot ? c.map((v, i) => v + (C.hot[i] - v) * hot) : c, a: (0.15 + 0.85 * Math.pow(rel, 0.7)) * sat }; }
+function text(s, x, y, col, align = 'left', size = 12, bold = false) { ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.font = `${bold ? '600 ' : ''}${size}px ui-monospace,Menlo,monospace`; ctx.fillText(s, x, y); }
+const isRound = px => Math.abs(px / (gridTick * 10) - Math.round(px / (gridTick * 10))) < 1e-9;
+function trailStrip(r, x0, w, y, S) { const cw = w * TRAIL_DT / TRAIL_MS, x1 = x0 + w;
+  for (const s of r.trail) { const x = x0 + ((s.t - (S.t - TRAIL_MS)) / TRAIL_MS) * w; if (x < x0) continue; const rel = s.sz / S.maxSz; if (rel <= 0) continue;
+    const cx0 = Math.max(x0, x), cx1 = Math.min(x1, x + Math.max(2, cw)); if (cx1 <= cx0) continue;    // clamp to the trail column
+    ctx.fillStyle = rgba(rel > 0.85 ? C.hot : sideC(r.side), (0.1 + 0.8 * Math.pow(rel, 0.7)) * (0.35 + 0.65 * persistence(r))); ctx.fillRect(cx0, y + 3, cx1 - cx0, ROW - 6); }
+  for (const p of r.pulses) if (p.type === 'fill') { const x = x0 + ((p.t0 - (S.t - TRAIL_MS)) / TRAIL_MS) * w; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y + ROW / 2, 2.5, 0, 7); ctx.fill(); } }
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+// ───────────── ribbon variants ─────────────
+// shareBar: one bar from bid colour (left) to ask colour (right); the divider is the microprice / bid share.
+function shareBar(S, x, y, w, h) {
+  const sx = x + S.share * w; ctx.fillStyle = rgba(C.bid, 0.55); ctx.fillRect(x, y, sx - x, h); ctx.fillStyle = rgba(C.ask, 0.55); ctx.fillRect(sx, y, x + w - sx, h);
+  ctx.fillStyle = '#fff'; ctx.fillRect(sx - 1, y - 3, 2, h + 6); ctx.fillStyle = '#ffffff30'; ctx.fillRect(x + w / 2, y - 2, 1, h + 4);
+}
+function ribbon1(S, L) {  // own row
+  const y = S.ribY, h = ribH(), W = tapeOn ? innerWidth - TAPE_W : innerWidth, cy = y + h / 2;
+  ctx.fillStyle = rgba(C.mid, 0.10); ctx.fillRect(0, y, W, h); ctx.fillStyle = rgba(C.mid, 0.6); ctx.fillRect(0, y, W, 1); ctx.fillRect(0, y + h - 1, W, 1);
+  text(fmtMid(S), L.px, cy, '#fff', L.pxAlign, 18, true);
+  if (stat.last !== null) { const lc = stat.lastDir > 0 ? C.bid : stat.lastDir < 0 ? C.ask : [200, 200, 200]; text(`${stat.lastDir > 0 ? '▲' : stat.lastDir < 0 ? '▼' : '·'} ${stat.last.toFixed(S.rawDec)}`, W - 16, cy, rgba(lc, 1), 'right', 11, true); }
+  const spread = S.a - S.b, rt = spread / rawTick; text(`SPREAD ${spread.toFixed(S.rawDec)}  ·  ${Math.round(rt)} tick${Math.round(rt) === 1 ? '' : 's'}`, L.info, cy, rgba(C.mid, 1), 'left', 11, true);
+  shareBar(S, L.bar0, y + 11, L.bar1 - L.bar0, h - 22);
+  text(`${fmtSz(S.bb?.sz || 0)}`, L.bar0 - 6, cy, rgba(C.bid, 1), 'right', 11, true); text(`${fmtSz(S.aa?.sz || 0)}`, L.bar1 + 6, cy, rgba(C.ask, 1), 'left', 11, true);
+  text(`µ ${S.micro.toFixed(S.dec + 2)}  ·  ${Math.round(S.share * 100)}% bid`, L.micro ?? L.bar1 + 60, cy, '#fff', 'left', 11, true);
+}
+function ribbon2(S, L) {  // edge line + pill; best rows carry the share as left-edge bars
+  const y = S.ribY, W = innerWidth; ctx.fillStyle = rgba(C.mid, 0.95); ctx.fillRect(0, y - 1, W, 2);
+  const s = `${fmtPx(S.mid, S)}   spr ${(S.a - S.b).toFixed(S.dec)}   µ ${S.micro.toFixed(S.dec + 2)}   ${Math.round(S.share * 100)}% bid`;
+  ctx.font = '600 12px ui-monospace,Menlo,monospace'; const tw = ctx.measureText(s).width + 24; const px0 = L.pillX - (L.pillAlign === 'center' ? tw / 2 : L.pillAlign === 'right' ? tw : 0);
+  ctx.fillStyle = '#0b0e11'; roundRect(px0, y - 12, tw, 24, 12); ctx.fill(); ctx.strokeStyle = rgba(C.mid, 0.95); ctx.lineWidth = 1.5; ctx.stroke(); text(s, px0 + 12, y, '#fff', 'left', 12, true);
+  const ar = S.rows[S.midIdx - 1], br = S.rows[S.midIdx]; if (ar && br) { ctx.fillStyle = rgba(C.ask, 0.9); ctx.fillRect(L.edgeX, ar.y + ROW * (1 - (1 - S.share)), 4, ROW * (1 - S.share)); ctx.fillStyle = rgba(C.bid, 0.9); ctx.fillRect(L.edgeX, br.y, 4, ROW * S.share); }
+}
+function ribbon3(S, L) {  // side stat panel
+  const y = S.ribY, W = innerWidth; ctx.fillStyle = rgba(C.mid, 0.7); ctx.fillRect(0, y - 0.5, W, 1);
+  const pw = 170, ph = 96, px = L.panelX, py = Math.max(6, Math.min(innerHeight - ph - 6, y - ph / 2));
+  ctx.fillStyle = '#0f1319f2'; roundRect(px, py, pw, ph, 6); ctx.fill(); ctx.strokeStyle = rgba(C.mid, 0.6); ctx.lineWidth = 1; ctx.stroke();
+  text(fmtPx(S.mid, S), px + 12, py + 18, '#fff', 'left', 18, true); text('MID', px + pw - 12, py + 18, C.dim, 'right', 10);
+  const ticks = (S.a - S.b) / gridTick; text(`spread ${(S.a - S.b).toFixed(S.dec)}${ticks >= 0.99 ? ` (${Math.round(ticks)}t)` : ''}`, px + 12, py + 40, C.text, 'left', 11);
+  text(`µ ${S.micro.toFixed(S.dec + 2)}`, px + 12, py + 56, rgba(C.mid, 1), 'left', 11, true);
+  shareBar(S, px + 12, py + 70, pw - 24, 12); text(`${Math.round(S.share * 100)}%`, px + 12 + S.share * (pw - 24), py + 90, '#fff', 'center', 10, true);
+  ctx.fillStyle = rgba(C.mid, 0.7); ctx.fillRect(px - 20, y - 0.5, 20, 1);
+}
+const RIB = { 1: ribbon1, 2: ribbon2, 3: ribbon3 };
+
+// ───────────── view: ladder (v1 A + trails column) ─────────────
+function drawLadder(S) {
+  const W = innerWidth, X = { px: 90, heat: 110, sz: 200 }, BLK = 200; X.trail = trailsOn ? 135 : 215;
+  // trails on: price section | trails | 200 px block column with qty at the bar end (gutter 70 px for the label)
+  const RW = tapeOn ? W - TAPE_W : W;
+  X.blk = trailsOn ? RW - BLK - 80 : 230; const blkW = trailsOn ? BLK : Math.min(360, RW - X.blk - 260); const trailW = trailsOn ? Math.max(120, X.blk - 16 - X.trail) : 0;
+  const P0 = X.blk, PW = blkW;   // profile always lives in the block column
+  for (const side of ['ask', 'bid']) { const c = sideC(side); ctx.beginPath(); let started = false;
+    for (const row of S.rows) { if (row.side !== side) continue; const w = P0 + (row.cum / S.maxCum) * PW; if (!started) { ctx.moveTo(P0, row.y); started = true; } ctx.lineTo(w, row.y); ctx.lineTo(w, row.y + ROW); }
+    ctx.lineTo(P0, side === 'ask' ? S.ribY : innerHeight); ctx.closePath();
+    const g = ctx.createLinearGradient(P0, 0, P0 + PW, 0); g.addColorStop(0, rgba(c, 0.18)); g.addColorStop(1, rgba(c, 0.03)); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = rgba(c, 0.5); ctx.lineWidth = 1; ctx.stroke(); }
+  for (const row of S.rows) { const y = row.y, cy = y + ROW / 2, dim = row.inRuler ? 1 : 0.45;
+    if (row.side === 'spread') { ctx.fillStyle = rgba(C.mid, 0.05); ctx.fillRect(0, y, W, ROW); text(fmtPx(row.px, S), X.px, cy, C.dim, 'right'); continue; }
+    if (row.empty) { text(fmtPx(row.px, S), X.px, cy, isRound(row.px) ? C.text : C.dim, 'right', 12, isRound(row.px)); continue; }
+    const c = sideC(row.side), ps = pulseState(row.r), h = heatColour(row, S); ctx.globalAlpha = dim;
+    ctx.fillStyle = rgba(h.c, h.a); ctx.fillRect(X.heat, y + 2, 14, ROW - 4);
+    const w = (row.shown / S.maxSz) * blkW; ctx.fillStyle = rgba(h.c, 0.22 + 0.5 * persistence(row.r)); ctx.fillRect(X.blk, y + 3, w, ROW - 6);
+    if (ps.ghost) { ctx.fillStyle = rgba(c, 0.25 * ps.ghost); ctx.fillRect(X.blk + w, y + 3, Math.max(0, ((row.r.prev - row.live) / S.maxSz) * blkW), ROW - 6); }
+    if (ps.add) { ctx.strokeStyle = rgba([255, 255, 255], 0.8 * ps.add); ctx.lineWidth = 1; ctx.strokeRect(X.blk + 0.5, y + 3.5, Math.max(w, 2), ROW - 7); }
+    if (ps.fill) { ctx.fillStyle = rgba([255, 255, 255], 0.55 * ps.fill); ctx.fillRect(X.heat - 6, y + 2, 4, ROW - 4); ctx.fillStyle = rgba(C.hot, 0.35 * ps.fill); ctx.fillRect(0, y, W, ROW); }
+    if (ps.flash) { ctx.fillStyle = rgba(c, 0.12 * ps.flash); ctx.fillRect(X.blk, y, blkW, ROW); }
+    text(fmtPx(row.px, S), X.px, cy, isRound(row.px) ? C.text : rgba(c, 0.9), 'right', 12, isRound(row.px));
+    const nDots = row.live ? '·'.repeat(Math.min(6, book[row.side].get(row.px)?.n || 0)) : '';
+    if (trailsOn) { const lx = X.blk + w + 6, lbl = fmtSz(row.shown); ctx.font = "11px ui-monospace,Menlo,monospace"; const tw = ctx.measureText(lbl).width; ctx.fillStyle = "#0b0e11cc"; ctx.fillRect(lx - 2, y + 5, tw + 4, ROW - 10); text(lbl, lx, cy, C.text, "left", 11); if (nDots) text(nDots, lx + ctx.measureText(fmtSz(row.shown)).width + 4, cy, rgba(c, 0.6)); trailStrip(row.r, X.trail, trailW, y, S); }
+    else { text(fmtSz(row.shown), X.sz, cy, C.text, 'right'); if (nDots) text(nDots, X.sz + 6, cy, rgba(c, 0.6)); }
+    ctx.globalAlpha = 1; }
+  if (trailsOn) { ctx.fillStyle = '#ffffff18'; ctx.fillRect(X.trail, 0, 1, innerHeight); ctx.fillRect(X.trail + trailW, 0, 1, innerHeight); text('−12 s', X.trail + 3, 8, C.dim, 'left', 9); text('now', X.trail + trailW - 3, 8, C.dim, 'right', 9); }
+  for (const [k, yy] of S.rulerY.entries()) { ctx.fillStyle = '#ffffff30'; ctx.fillRect(0, Math.round(yy), W, 1); const rr = k === 0 ? S.rows[Math.max(0, S.midIdx - 12)] : S.rows[Math.min(S.rows.length - 1, S.midIdx + 11)]; if (rr?.cum) text(`Σ ${fmtSz(rr.cum)}`, X.blk + blkW + 8, yy + (k ? -8 : 8), C.dim); }
+  const rb = trailsOn ? { bar0: X.trail + 200, bar1: X.trail + 380, micro: X.trail + 440 } : { bar0: X.blk + 110, bar1: X.blk + 270, micro: X.blk + 330 };
+  RIB[ribbonV](S, { px: X.px, pxAlign: 'right', info: X.heat, ...rb, pillX: X.blk, pillAlign: 'left', edgeX: X.heat - 8, panelX: X.blk + blkW + 24 });
+}
+
+// ───────────── view: centre spine (v1 B) ─────────────
+function drawSpine(S) {
+  const W = tapeOn ? innerWidth - TAPE_W : innerWidth, cx = Math.round(W / 2), half = Math.min(420, cx - 60);
+  for (const side of ['ask', 'bid']) { const c = sideC(side), dir = side === 'bid' ? -1 : 1; ctx.beginPath(); let first = true;
+    for (const row of S.rows) { if (row.side !== side) continue; const w = cx + dir * (60 + (row.cum / S.maxCum) * (half - 60)); if (first) { ctx.moveTo(cx + dir * 60, row.y); first = false; } ctx.lineTo(w, row.y); ctx.lineTo(w, row.y + ROW); }
+    ctx.lineTo(cx + dir * 60, side === 'ask' ? S.ribY : innerHeight); ctx.closePath(); ctx.fillStyle = rgba(c, 0.07); ctx.fill(); ctx.strokeStyle = rgba(c, 0.45); ctx.stroke(); }
+  for (const row of S.rows) { const y = row.y, cy = y + ROW / 2, dim = row.inRuler ? 1 : 0.45;
+    if (row.side === 'spread') { ctx.fillStyle = rgba(C.mid, 0.05); ctx.fillRect(0, y, W, ROW); text(fmtPx(row.px, S), cx, cy, C.dim, 'center'); continue; }
+    ctx.globalAlpha = dim; const c = sideC(row.side), dir = row.side === 'bid' ? -1 : 1;
+    text(fmtPx(row.px, S), cx, cy, isRound(row.px) ? C.text : rgba(c, 0.85), 'center', 12, isRound(row.px));
+    if (row.empty) { ctx.globalAlpha = 1; continue; }
+    const ps = pulseState(row.r), h = heatColour(row, S), w = (row.shown / S.maxSz) * (half - 60), x0 = cx + dir * 60;
+    ctx.fillStyle = rgba(h.c, h.a); ctx.fillRect(dir < 0 ? x0 - w : x0, y + 3, w, ROW - 6);
+    if (ps.ghost) { const gw = ((row.r.prev - row.live) / S.maxSz) * (half - 60); ctx.fillStyle = rgba(c, 0.2 * ps.ghost); ctx.fillRect(dir < 0 ? x0 - w - gw : x0 + w, y + 3, gw, ROW - 6); }
+    if (ps.add) { ctx.strokeStyle = rgba([255, 255, 255], 0.8 * ps.add); ctx.strokeRect((dir < 0 ? x0 - w : x0) + 0.5, y + 3.5, Math.max(w, 2), ROW - 7); }
+    if (ps.fill) { ctx.fillStyle = rgba([255, 255, 255], 0.6 * ps.fill); ctx.fillRect(cx + dir * 52, y + 2, 4, ROW - 4); ctx.fillStyle = rgba(C.hot, 0.3 * ps.fill); ctx.fillRect(dir < 0 ? 0 : cx, y, cx, ROW); }
+    text(fmtSz(row.shown), dir < 0 ? x0 - w - 6 : x0 + w + 6, cy, C.text, dir < 0 ? 'right' : 'left', 11);
+    ctx.globalAlpha = 1; }
+  for (const yy of S.rulerY) { ctx.fillStyle = '#ffffff30'; ctx.fillRect(0, Math.round(yy), W, 1); }
+  RIB[ribbonV](S, { px: cx, pxAlign: "center", info: cx + 60, bar0: cx - 300, bar1: cx - 120, micro: cx + 230, pillX: cx, pillAlign: 'center', edgeX: cx - 2, panelX: W - 190 });
+}
+
+// ───────────── frame loop + HUD ─────────────
+const frames = []; let lastT = now(), lastDraw = 0, drawn = 0, lastVersion = -1, fpsShown = 0, lastFpsT = now();
+function loop() { requestAnimationFrame(loop);
+  const t = now(), dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  const anyMotion = [...hist.values()].some(r => r.pulses.length || Math.abs(r.shown.x - r.shown.target) > 1e-6) || Math.abs(anchor.x - anchor.target) > 1e-6;
+  const cap = fpsMode === '30' ? 1000 / 30 - 1 : 0;
+  if (fpsMode === 'update' && version === lastVersion && !anyMotion) return; if (t - lastDraw < cap) return;
+  const t0 = now(), S = sample(dt); lastDraw = t; lastVersion = version;
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  if (S) { (view === 'spine' ? drawSpine : drawLadder)(S); if (tapeOn) drawTape(S); }
+  const ft = now() - t0; frames.push(ft); if (frames.length > 120) frames.shift(); drawn++;
+  if (t - lastFpsT > 500) { fpsShown = drawn / ((t - lastFpsT) / 1000); drawn = 0; lastFpsT = t;
+    const sorted = [...frames].sort((a, b) => a - b), p = q => (sorted[Math.floor(q * (sorted.length - 1))] || 0).toFixed(2), age = x => x ? ((t - x) / 1000).toFixed(1) + 's' : '–';
+    const stale = (stat.lastFast && t - stat.lastFast > 3000) || (stat.lastSlow && t - stat.lastSlow > 20000);
+    $('hud').textContent = `MARKET   ${coin}   group ${activeOpt ? activeOpt.label : '–'} (sig ${activeOpt?.N}${activeOpt?.m ? '×' + activeOpt.m : ''})   raw ${rawTick}\nstate    ${stale ? 'STALE' : stat.state}   resyncs ${stat.resync}   grid changes ${stat.gridChanged}\nslow ${stat.slow}  last ${age(stat.lastSlow)}   fast ${stat.fast}  last ${age(stat.lastFast)}\nbbo ${stat.bbo}   trades ${stat.trades}   events ${stat.events}\nlast events ${ev.slice(-6).join(' ')}\n\nRENDER   mode ${fpsMode}   fps ${fpsShown.toFixed(1)}   view ${view}   ribbon ${ribbonV}${trailsOn ? '   trails' : ''}\nframe p50 ${p(0.5)} ms  p95 ${p(0.95)} ms   hist ${hist.size}`; }
+}
+loop();
+</script></body></html>
