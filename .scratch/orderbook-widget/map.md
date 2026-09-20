@@ -12,7 +12,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - **Execution override**: this map carries execution. Slices after the decision tickets are `task` tickets that build the thing; the map is done when the demo is deployed and reviewed.
 - **North star** (user's words): *Don't build an order-book component; build a browser-based market microstructure observatory.* Answer: where liquidity is → where it came from → how persistent it is → how it is changing → how trades interact with it → how quickly it recovers → what executing against it would cost.
 - **Standing preference**: default to the most senior engineering approach; drop it only when the overhead is demonstrably unjustified, and decide that together, never silently.
-- **Honesty rule**: the feed is 2 Hz full snapshots (`l2Book`), not deltas. Every "senior" mechanism must have a real producer in this feed or be labelled synthetic. No sequence numbers, no gap counts, no per-order OFI. ADRs say why.
+- **Honesty rule**: the feed is full snapshots (`l2Book`), not deltas: observed ~5.4 s median between 20-level pushes, ~0.54 s with `fast: true` (5 levels). Every "senior" mechanism must have a real producer in this feed or be labelled synthetic. No sequence numbers, no gap counts, no per-order OFI. ADRs say why.
 - **Inspiration**: tapesurf.com order-book view (screenshots in the charting session: heat cells, depth profile, depth ruler, cumulative labels, best line, spread row, flow histograms). Feel + layout + motion all wanted.
 - **Skills every session consults**: `grilling` + `domain-modeling` for decision tickets; `prototype` for visual/animation tickets; `research` for AFK fact-finding. Glossary lives in `CONTEXT.md`; challenge new terms against it.
 - **Locked in charting** (not ticketed, already decided):
@@ -30,7 +30,8 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 
 ## Decisions so far
 
-<!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
+- [Hyperliquid Feed Facts](issues/01-hyperliquid-feed-facts.md): `l2Book` is a full snapshot; 20 levels/side at ~5.4 s observed cadence, `fast` gives 5 levels at ~0.54 s. Tick derivation formula + worked examples in `docs/research/hyperliquid-feed.md`. Precision change = unsubscribe old object, subscribe new; two precisions on one socket are indistinguishable. `levels[0]` bids desc / `[1]` asks asc is observed, not contracted: assert it. Ping every ~50 s or the server drops at 60 s. Trade↔book causal ordering is not guaranteed: consumed-vs-cancelled stays a heuristic.
+- [Tapesurf Visual Catalogue](issues/02-tapesurf-visual-catalogue.md): ladder is WebGL2 canvas (controls DOM); row = grouped price → heat cell → exact size → order block, plus stepped cumulative profile; heat brightness and block width normalise to the largest level *inside* the depth rulers; centre divider is last trade, not BBO; Max FPS 30/60/Unlimited decoupled from capture. Findings + 18 captures in `docs/research/tapesurf-orderbook.md`. Do-not-copy list: literal palette, last-trade-as-best-line, hidden drag grouping.
 
 ## Not yet specified
 
