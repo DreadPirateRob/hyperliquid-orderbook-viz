@@ -34,6 +34,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - [Tapesurf Visual Catalogue](issues/02-tapesurf-visual-catalogue.md): ladder is WebGL2 canvas (controls DOM); row = grouped price → heat cell → exact size → order block, plus stepped cumulative profile; heat brightness and block width normalise to the largest level *inside* the depth rulers; centre divider is last trade, not BBO; Max FPS 30/60/Unlimited decoupled from capture. Findings + 18 captures in `docs/research/tapesurf-orderbook.md`. Do-not-copy list: literal palette, last-trade-as-best-line, hidden drag grouping.
 - [Feed Cadence Strategy](issues/16-feed-cadence-strategy.md): four subscriptions on one socket (slow 20-level ~5 s, fast 5-level ~0.5 s, bbo ~70 ms, trades); fast messages are discriminable by `data.fast`. Fusion by window authority (newest stream wins in its price window); lifecycle events on every merged change, tagged by stream; STALE thresholds fast > 3 s / slow > 20 s; precision change resubscribes both books, ladder resets on first fast push; fixtures are one interleaved JSONL.
 - [Engine Architecture](issues/03-engine-architecture.md): prices as integer `rawTick` counts per coin (grid/`sigTick` is presentation); sorted typed arrays per side, merge pass = diff; price-keyed history ring with bounded post-vanish retention; lifecycle events `added|grew|shrank|vanished|outOfWindow`, every decrease split into `consumed`/`cancelled` by temporal trade join (live evidence: 17% of top-5 decreases trade-explained), `historical` first trades batch excluded; pure pull API `apply/snapshot/drain/metrics` with time only via events (`tick(now)` from host); socket adapter owns transport, engine owns `LIVE|STALE|RESYNCING`; all I/O types structured-clone-safe for a deferred Worker.
+- [Precision Change Semantics](issues/04-precision-change-semantics.md): server-side aggregation via resubscribe of both books; dropdown `2, 3, 4, 5, 5×2, 5×5, full` labelled with the live grid tick; persistence is fresh start (raw-tick keys, no merging); transition is freeze-and-crossfade under `RESYNCING(precision)`, top 5 animate in on first fast push; a grid-tick change at fixed precision (price crossing a power of ten) takes the same path without RESYNCING and gets a fixture + test.
 
 ## Not yet specified
 
@@ -42,6 +43,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - **Coin universe**: how the coin selector learns available coins (`meta` / `spotMeta`), and whether spot markets are supported at all.
 - **UX detail after the prototype**: HUD layout, hover tooltip contents, pause/replay scrubber, execution-cost input placement. Sharpens once the ladder prototype settles the visual language.
 - **Implementation slicing**: the implementation slice will be too large for one session; it splits into sub-tickets once types/contracts exist.
+- **Quick-grouping gesture**: local client-side coarsening (drag on the ladder) layered over the server precision; only after the prototype shows the dropdown alone is not enough.
 
 ## Out of scope
 

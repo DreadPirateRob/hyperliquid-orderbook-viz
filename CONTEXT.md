@@ -31,7 +31,7 @@ The row spacing of the ladder at the current precision: derived from the mid pri
 _Avoid_: bucket size, grouping
 
 **Precision**:
-The `nSigFigs` setting that controls how many significant figures the feed rounds prices to. Changing it changes the grid tick, never the raw tick.
+The `nSigFigs` and mantissa pair the widget subscribes with; the feed rounds prices to it server-side. Changing it changes the grid tick, never the raw tick, and starts persistence fresh.
 _Avoid_: grouping, aggregation, decimals
 
 **Trade**:
