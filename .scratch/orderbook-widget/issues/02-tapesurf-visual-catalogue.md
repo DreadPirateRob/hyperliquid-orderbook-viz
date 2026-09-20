@@ -1,7 +1,7 @@
 # Tapesurf Visual Catalogue
 
 Type: research
-Status: open
+Status: claimed
 
 ## Question
 

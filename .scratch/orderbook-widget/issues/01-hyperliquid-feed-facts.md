@@ -1,7 +1,7 @@
 # Hyperliquid Feed Facts
 
 Type: research
-Status: open
+Status: claimed
 
 ## Question
 
