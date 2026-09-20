@@ -16,7 +16,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - **Inspiration**: tapesurf.com order-book view (screenshots in the charting session: heat cells, depth profile, depth ruler, cumulative labels, best line, spread row, flow histograms). Feel + layout + motion all wanted.
 - **Skills every session consults**: `grilling` + `domain-modeling` for decision tickets; `prototype` for visual/animation tickets; `research` for AFK fact-finding. Glossary lives in `CONTEXT.md`; challenge new terms against it.
 - **Locked in charting** (not ticketed, already decided):
-  - Feeds: `l2Book` + `trades` + `bbo`, one socket.
+  - Feeds: slow + fast `l2Book`, `trades`, `bbo`, one socket (see Feed Cadence Strategy).
   - Prices: integer ticks internally, formatted at the edge.
   - Ladder: pinned grid, hysteresis re-centre.
   - Animation: springs behind one `animate(target)` primitive; event pulses decay; render cadence user-capped (60 / 30 / on-update) and `prefers-reduced-motion` honoured; feed ingest never throttled.
@@ -32,6 +32,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 
 - [Hyperliquid Feed Facts](issues/01-hyperliquid-feed-facts.md): `l2Book` is a full snapshot; 20 levels/side at ~5.4 s observed cadence, `fast` gives 5 levels at ~0.54 s. Tick derivation formula + worked examples in `docs/research/hyperliquid-feed.md`. Precision change = unsubscribe old object, subscribe new; two precisions on one socket are indistinguishable. `levels[0]` bids desc / `[1]` asks asc is observed, not contracted: assert it. Ping every ~50 s or the server drops at 60 s. Trade↔book causal ordering is not guaranteed: consumed-vs-cancelled stays a heuristic.
 - [Tapesurf Visual Catalogue](issues/02-tapesurf-visual-catalogue.md): ladder is WebGL2 canvas (controls DOM); row = grouped price → heat cell → exact size → order block, plus stepped cumulative profile; heat brightness and block width normalise to the largest level *inside* the depth rulers; centre divider is last trade, not BBO; Max FPS 30/60/Unlimited decoupled from capture. Findings + 18 captures in `docs/research/tapesurf-orderbook.md`. Do-not-copy list: literal palette, last-trade-as-best-line, hidden drag grouping.
+- [Feed Cadence Strategy](issues/16-feed-cadence-strategy.md): four subscriptions on one socket (slow 20-level ~5 s, fast 5-level ~0.5 s, bbo ~70 ms, trades); fast messages are discriminable by `data.fast`. Fusion by window authority (newest stream wins in its price window); lifecycle events on every merged change, tagged by stream; STALE thresholds fast > 3 s / slow > 20 s; precision change resubscribes both books, ladder resets on first fast push; fixtures are one interleaved JSONL.
 
 ## Not yet specified
 

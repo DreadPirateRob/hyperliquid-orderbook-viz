@@ -7,8 +7,16 @@ A browser-based market microstructure observatory for one Hyperliquid market at 
 ### Feed
 
 **Book push**:
-One full `l2Book` snapshot from Hyperliquid: both sides, up to 20 levels each, with a block `time`. The feed sends whole books, never deltas.
+One full `l2Book` snapshot from Hyperliquid, with a block `time`. The feed sends whole books, never deltas. Comes in two forms: the **slow book** (up to 20 levels per side, ~5 s apart) and the **fast book** (5 levels per side, ~0.5 s apart).
 _Avoid_: update, delta, message
+
+**Stream**:
+One of the four subscriptions the widget fuses for a coin: slow book, fast book, BBO, trades. Every lifecycle event carries the stream that produced it.
+_Avoid_: channel, feed (feed is the whole set)
+
+**Window authority**:
+The fusion rule: the newest stream wins inside the price window it covers (BBO owns the best level, fast book the top five prices, slow book everything beyond).
+_Avoid_: merge, overlay
 
 **Level**:
 One resting price on one side of the book, with its size and order count (`n`).
