@@ -85,9 +85,17 @@ One of DISCONNECTED, CONNECTING, SUBSCRIBING, LIVE, STALE, RESYNCING. STALE mean
 The fixed vertical price grid the widget draws. Rows are prices; data flows through them; the grid re-centres only when the best price drifts past a band.
 _Avoid_: list, table, DOM
 
-**Presentation frame**:
-The per-animation-frame sample of engine state plus animation state that the renderer draws. Never stored; derived from `(engine state, now)`.
-_Avoid_: view model, render state
+**Presenter**:
+The stateful layer between engine and renderer: owns springs, pulses, the ladder anchor, and layout, and emits one frame per animation tick.
+_Avoid_: view model, animator
+
+**Frame**:
+The typed-array output of the presenter for one animation tick, with dirty flags for the static and dynamic layers. Never stored across ticks.
+_Avoid_: presentation frame, render state
+
+**Renderer**:
+The stateless painter that draws a frame onto the two canvases. Holds no animation or book state.
+_Avoid_: view, canvas layer (that is a part of it)
 
 **Render cadence**:
 The user-selectable cap on how often the renderer draws (60 fps, 30 fps, on-update). Independent of feed cadence.
