@@ -115,7 +115,7 @@ The cumulative-size stair-step drawn behind the ladder, one side warm, one cool.
 A horizontal marker at a fixed distance from mid, labelled with cumulative volume to that point; rows beyond it are dimmed.
 
 **Boundary**:
-The bid/ask gap in the ladder, drawn as a line with the bid and ask price paths, the last-trade tag, the imbalance history, and the stacked share bar around it. Reads BBO and trades only; a readout, never a control.
+The bid/ask gap in the ladder, drawn as a line with the bid and ask price paths, the last-trade tag, and the stacked share bar around it. Reads BBO and trades only; a readout, never a control.
 _Avoid_: ribbon, spread row, mid row
 
 **Share bar**:
@@ -125,9 +125,6 @@ _Avoid_: imbalance bar, µ marker
 **Price path**:
 The best bid and best ask traced over the trails window; the gap between the two paths is the spread.
 _Avoid_: mid line, price line
-
-**Imbalance history**:
-Bars straddling the boundary, one per trails sample, showing `2·share − 1` over the trails window.
 
 **Grouping**:
 The user-facing row step of the ladder, offered as five per-coin derived ticks labelled by that step ($1, $2, $5, …). Each option maps to one server precision; changing it resubscribes both books.

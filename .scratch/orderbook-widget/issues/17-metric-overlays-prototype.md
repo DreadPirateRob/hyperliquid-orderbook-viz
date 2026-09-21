@@ -29,9 +29,11 @@ Prototype v4 on branch `prototype/ladder` @ `b85ea22` (`prototype/ladder-prototy
 ### Boundary (replaces the ribbon row; `ribH = 0`)
 - **Bid and ask paths** over the trails window (rose / teal, glow + 1.25 px line), each with a small price tag at the "now" edge; the gap between the paths is the spread. No spread text.
 - **Last-trade tag** on the price column at the row of the last print (`▲ 81241.0`, direction-coloured); mid in blue until the first trade. 1 px blue boundary line at the bid/ask gap.
-- **Imbalance history**: bars straddling the boundary in the trails column, one per 250 ms sample, value `2·share − 1`, teal up / rose down, alpha 0.45, same 12 s axis as the trails (insilico reference).
+- **Imbalance history** (insilico-style bars on the boundary): tried, then **removed**: it drifted off the BBO after re-centres and read as noise tiles. Imbalance is carried by the stacked share bar only.
 - **Current share**: vertical stacked bar (10 × 44 px) in the label gutter, ask part above the boundary, bid below, height ∝ share, best sizes beside. No `%` or `µ` labels.
 - **Removed from the boundary**: order-count dots (whole ladder), spread text, last-trade label at the right, execution-cost widget (two tried: text + hover card, then compact bars; neither earned its place). Execution cost stays in the HUD; its UI home is a build-time decision alongside the hover tooltip.
+- **Layout with trails on is trails-first**: `trails | price | heat | bars | tape`, so the price column sits beside the bars. Trail tiles dimmed (peak alpha ≈ 0.48) so the paths keep ≥ 3:1 contrast over them. No time axis or labels on the trails column (tried a 2 s axis; removed).
+- Final prototype commit: `prototype/ladder` @ `802ae3c`.
 
 ### Metric corrections found on live data (amend ticket 06)
 1. **Cancel ratio by volume is ~100 % on BTC** (walls of 10–30 BTC flicker; fills are 0.001–0.05). Added a **by-count** form `1 − hits / decreases`; BBO-stream flicker is excluded from the join. Both reported; by-count is the honest headline.

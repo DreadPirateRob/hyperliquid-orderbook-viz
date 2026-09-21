@@ -323,7 +323,7 @@ Spring.prototype.step = function (dt) { const a = this.k * (this.target - this.x
 const decay = (age, tau) => Math.exp(-age / tau);
 const anchor = new Spring(0, 40, 13); let anchorInit = false;
 const ROW = 22, TRAIL_MS = 12000, TRAIL_DT = 250; let lastTrail = 0;
-const midTrail = [];                                   // {t, b, a, share} sampled with the trails: bid/ask price paths + imbalance history
+const midTrail = [];                                   // {t, b, a, share} sampled with the trails: bid/ask price paths
 const ribH = () => 0;   // ribbon 1 is now a boundary overlay, not a row
 
 // ───────────── presentation sampling ─────────────
@@ -386,7 +386,7 @@ const isRound = px => Math.abs(px / (gridTick * 10) - Math.round(px / (gridTick 
 function trailStrip(r, x0, w, y, S) { const cw = w * TRAIL_DT / TRAIL_MS, x1 = x0 + w;
   for (const s of r.trail) { const x = x0 + ((s.t - (S.t - TRAIL_MS)) / TRAIL_MS) * w; if (x < x0) continue; const rel = s.sz / S.maxSz; if (rel <= 0) continue;
     const cx0 = Math.max(x0, x), cx1 = Math.min(x1, x + Math.max(2, cw)); if (cx1 <= cx0) continue;    // clamp to the trail column
-    ctx.fillStyle = rgba(rel > 0.85 ? C.hot : sideC(r.side), (0.1 + 0.8 * Math.pow(rel, 0.7)) * (0.35 + 0.65 * persistence(r))); ctx.fillRect(cx0, y + 3, cx1 - cx0, ROW - 6); }
+    ctx.fillStyle = rgba(rel > 0.85 ? C.hot : sideC(r.side), (0.06 + 0.42 * Math.pow(rel, 0.7)) * (0.35 + 0.65 * persistence(r))); ctx.fillRect(cx0, y + 3, cx1 - cx0, ROW - 6); }   // dimmed so the bid/ask paths keep ≥ 3:1 contrast over tiles
   for (const p of r.pulses) if (p.type === 'fill') { const x = x0 + ((p.t0 - (S.t - TRAIL_MS)) / TRAIL_MS) * w; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x, y + ROW / 2, 2.5, 0, 7); ctx.fill(); } }
 function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
@@ -396,7 +396,7 @@ function shareBar(S, x, y, w, h) {
   const sx = x + S.share * w; ctx.fillStyle = rgba(C.bid, 0.55); ctx.fillRect(x, y, sx - x, h); ctx.fillStyle = rgba(C.ask, 0.55); ctx.fillRect(sx, y, x + w - sx, h);
   ctx.fillStyle = '#fff'; ctx.fillRect(sx - 1, y - 3, 2, h + 6); ctx.fillStyle = '#ffffff30'; ctx.fillRect(x + w / 2, y - 2, 1, h + 4);
 }
-function ribbon1(S, L) {  // boundary overlay: 1 px line + mid tag on the price column, stacked share bar + µ/% in the block column, imbalance history under the paths
+function ribbon1(S, L) {  // boundary overlay: 1 px line, last-trade tag on the price column, stacked share bar in the gutter
   const y = S.ribY, W = tapeOn ? innerWidth - TAPE_W : innerWidth;
   ctx.fillStyle = rgba(C.mid, 0.7); ctx.fillRect(0, y - 0.5, W, 1);
   // last-trade tag on the price column, at the row of the last print, coloured by direction; falls back to mid until a trade arrives
@@ -409,10 +409,6 @@ function ribbon1(S, L) {  // boundary overlay: 1 px line + mid tag on the price 
     ctx.fillStyle = rgba(C.ask, 0.8); ctx.fillRect(bx, y - ha, bw, ha); ctx.fillStyle = rgba(C.bid, 0.8); ctx.fillRect(bx, y, bw, hb); ctx.fillStyle = '#fff'; ctx.fillRect(bx - 2, y - 1, bw + 4, 2);
     text(fmtSz(S.aa?.sz || 0), bx + bw + 6, y - ha / 2, rgba(C.ask, 1), 'left', 10, true); text(fmtSz(S.bb?.sz || 0), bx + bw + 6, y + hb / 2, rgba(C.bid, 1), 'left', 10, true);
   }
-  // imbalance history: bars straddling the boundary in the trails column, same time axis as the trails; teal = bid-heavy, rose = ask-heavy
-  if (L.hist0 !== undefined && midTrail.length > 1) { const x0 = L.hist0, hw = L.hist1 - L.hist0, half = 14, n = Math.round(TRAIL_MS / TRAIL_DT), bw = hw / n;
-    for (const s of midTrail) { const v = 2 * s.share - 1, x = x0 + ((s.t - (S.t - TRAIL_MS)) / TRAIL_MS) * hw; if (x < x0) continue; const bhh = Math.abs(v) * half;
-      ctx.fillStyle = rgba(v >= 0 ? C.bid : C.ask, 0.45); ctx.fillRect(x, v >= 0 ? y - bhh : y, Math.max(1, bw - 1), Math.max(1, bhh)); } }
 }
 function ribbon2(S, L) {  // edge line + pill; best rows carry the share as left-edge bars
   const y = S.ribY, W = innerWidth; ctx.fillStyle = rgba(C.mid, 0.95); ctx.fillRect(0, y - 1, W, 2);
@@ -444,10 +440,12 @@ function drawShapePanel(S) {
 }
 // ───────────── view: ladder (v1 A + trails column) ─────────────
 function drawLadder(S) {
-  const W = innerWidth, X = { px: 90, heat: 110, sz: 200 }, BLK = 300; X.lane = 130; X.trail = trailsOn ? 140 : 215;   // lane = 6 px overlay gutter between heat cell and trails
-  // trails on: price | heat | lane | trails | block (200 px, qty at the bar end, 70 px gutter for the label)
-  const RW = tapeOn ? W - TAPE_W : W;
-  X.blk = trailsOn ? RW - BLK - 170 : 230; const blkW = trailsOn ? BLK : Math.min(360, RW - X.blk - 260); const trailW = trailsOn ? Math.max(120, X.blk - X.trail) : 0;
+  const W = innerWidth, BLK = 300, RW = tapeOn ? W - TAPE_W : W;
+  // trails on: trails | price | heat | lane | block (300 px, qty at the bar end, 170 px gutter for labels + share bar)
+  const X = {}; const blkW = trailsOn ? BLK : Math.min(360, RW - 230 - 260);
+  if (trailsOn) { X.blk = RW - BLK - 170; X.heat = X.blk - 30; X.px = X.heat - 12; X.lane = X.heat + 18; X.trail = 8; }
+  else { X.px = 90; X.heat = 110; X.sz = 200; X.blk = 230; X.lane = 130; X.trail = 215; }
+  const trailW = trailsOn ? Math.max(120, X.px - 150 - X.trail) : 0;
   const P0 = X.blk, PW = blkW;   // profile always lives in the block column
   for (const side of ['ask', 'bid']) { const c = sideC(side); ctx.beginPath(); let started = false;
     for (const row of S.rows) { if (row.side !== side) continue; const w = P0 + (row.cum / S.maxCum) * PW; if (!started) { ctx.moveTo(P0, row.y); started = true; } ctx.lineTo(w, row.y); ctx.lineTo(w, row.y + ROW); }
@@ -474,7 +472,7 @@ function drawLadder(S) {
     if (trailsOn) { const lx = X.blk + w + 6, lbl = fmtSz(row.shown); ctx.font = "11px ui-monospace,Menlo,monospace"; const tw = ctx.measureText(lbl).width; ctx.fillStyle = "#0b0e11cc"; ctx.fillRect(lx - 2, y + 5, tw + 4, ROW - 10); text(lbl, lx, cy, C.text, "left", 11); trailStrip(row.r, X.trail, trailW, y, S); }
     else text(fmtSz(row.shown), X.sz, cy, C.text, 'right');
     ctx.globalAlpha = 1; }
-  if (trailsOn) { ctx.fillStyle = '#ffffff18'; ctx.fillRect(X.trail, 0, 1, CH()); ctx.fillRect(X.trail + trailW, 0, 1, CH()); text('−12 s', X.trail + 3, 8, C.dim, 'left', 9); text('now', X.trail + trailW - 3, 8, C.dim, 'right', 9); }
+  if (trailsOn) { ctx.fillStyle = '#ffffff18'; ctx.fillRect(X.trail, 0, 1, CH()); ctx.fillRect(X.trail + trailW, 0, 1, CH()); }
   if (trailsOn && midTrail.length > 1) {   // best bid / best ask paths over the trails window; the gap between them is the spread
     const rows = S.rows, yOf = px => { const above = rows.filter(r => r.px >= px), below = rows.filter(r => r.px < px); const ra = above.at(-1), rb = below[0];
       if (ra && rb) { const f = (ra.px - px) / (ra.px - rb.px); return ra.y + ROW / 2 + f * ((rb.y + ROW / 2) - (ra.y + ROW / 2)); } return ra ? ra.y + ROW / 2 : rb ? rb.y + ROW / 2 : -100; };
@@ -494,7 +492,7 @@ function drawLadder(S) {
       ctx.fillStyle = rgba(c, 0.9 * a); ctx.beginPath(); ctx.arc(mx0, r1.y + ROW / 2, 3, 0, 7); ctx.fill(); }
     drawShapePanel(S);
   }
-  const rb = trailsOn ? { bar0: X.blk + blkW + 34, bar1: X.blk + blkW + 34 + 90, hist0: X.trail, hist1: X.trail + trailW } : { bar0: X.blk + blkW + 34, bar1: X.blk + blkW + 34 + 90 };
+  const rb = trailsOn ? { bar0: X.blk + blkW + 34, bar1: X.blk + blkW + 34 + 90, } : { bar0: X.blk + blkW + 34, bar1: X.blk + blkW + 34 + 90 };
   RIB[ribbonV](S, { px: X.px, pxAlign: 'right', info: X.heat, ...rb, pillX: X.blk, pillAlign: 'left', edgeX: X.heat - 8, panelX: X.blk + blkW - 170 });
 }
 
