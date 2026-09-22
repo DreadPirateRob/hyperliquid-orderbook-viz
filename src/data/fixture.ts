@@ -71,7 +71,9 @@ export class MalformedFixture extends Error {
  * @returns The precision.
  */
 export function precisionOf(p: { readonly nSigFigs: number | null; readonly mantissa: number | null }): Precision {
-  return p.nSigFigs === null ? { _tag: "full" } : { _tag: "aggregated", nSigFigs: p.nSigFigs, mantissa: p.mantissa ?? undefined };
+  return p.nSigFigs === null
+    ? { _tag: "full" }
+    : { _tag: "aggregated", nSigFigs: p.nSigFigs, mantissa: p.mantissa ?? undefined };
 }
 
 /**

@@ -1,12 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": [
-    "typescript",
-    "react",
-    "react-perf",
-    "unicorn",
-    "oxc"
-  ],
+  "plugins": ["typescript", "react", "react-perf", "unicorn", "oxc"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
@@ -20,11 +14,7 @@
     "no-underscore-dangle": "off",
     "react/react-in-jsx-scope": "off"
   },
-  "ignorePatterns": [
-    "dist",
-    "prototype",
-    "node_modules"
-  ],
+  "ignorePatterns": ["dist", "prototype", "node_modules"],
   "settings": {
     "react": {
       "version": "19"

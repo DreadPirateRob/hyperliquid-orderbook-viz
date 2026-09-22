@@ -140,13 +140,28 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     ctx.fillRect(0, 0, width, height);
     const events = engine.drain();
     const trades = engine.drainTrades();
-    const S = scale === undefined ? undefined : sampler.sample({ snapshot, events, trades }, { height, gridTick, ruler: state.ruler }, t, dt);
+    const S =
+      scale === undefined
+        ? undefined
+        : sampler.sample({ snapshot, events, trades }, { height, gridTick, ruler: state.ruler }, t, dt);
     if (snapPending) {
       snapPending = false;
       sampler.snap();
     }
     if (S !== undefined && scale !== undefined) {
-      drawLadder({ ctx, width, height, scale, gridTick, trailsOn: state.trailsOn, tapeOn: state.tapeOn, overlaysOn: state.overlaysOn }, S);
+      drawLadder(
+        {
+          ctx,
+          width,
+          height,
+          scale,
+          gridTick,
+          trailsOn: state.trailsOn,
+          tapeOn: state.tapeOn,
+          overlaysOn: state.overlaysOn,
+        },
+        S,
+      );
     }
     if (t - lastStatus > STATUS_MS) {
       lastStatus = t;

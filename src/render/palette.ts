@@ -38,7 +38,16 @@ export const FONT = "ui-monospace,Menlo,monospace";
  * @param size - Font size in px.
  * @param bold - Weight 600 when true.
  */
-export function text(ctx: CanvasRenderingContext2D, s: string, x: number, y: number, colour: string, align: CanvasTextAlign = "left", size = 12, bold = false): void {
+export function text(
+  ctx: CanvasRenderingContext2D,
+  s: string,
+  x: number,
+  y: number,
+  colour: string,
+  align: CanvasTextAlign = "left",
+  size = 12,
+  bold = false,
+): void {
   ctx.fillStyle = colour;
   ctx.textAlign = align;
   ctx.textBaseline = "middle";

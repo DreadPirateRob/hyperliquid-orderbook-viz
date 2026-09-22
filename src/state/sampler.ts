@@ -126,7 +126,16 @@ export function createSampler(history: LevelHistory): Sampler {
 
 type MutableRow = { -readonly [K in keyof FrameRow]: FrameRow[K] };
 
-function layRows(count: number, top: number, grid: number, b: Tick, a: Tick, snapshot: BookSnapshot, history: LevelHistory, t: number): MutableRow[] {
+function layRows(
+  count: number,
+  top: number,
+  grid: number,
+  b: Tick,
+  a: Tick,
+  snapshot: BookSnapshot,
+  history: LevelHistory,
+  t: number,
+): MutableRow[] {
   const bids = indexByPx(snapshot.bids);
   const asks = indexByPx(snapshot.asks);
   const out: MutableRow[] = [];

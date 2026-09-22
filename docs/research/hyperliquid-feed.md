@@ -46,12 +46,12 @@ $$
 
 For `nSigFigs: null`, use `rawTick`; prices are then converted without rounding to an integer tick count using exact decimal arithmetic: `tickCount = price / tick`. The `max` is essential: aggregation must not claim resolution finer than the exchange's permitted decimal resolution. The underlying limits come from [Tick and lot size](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/tick-and-lot-size.md); the aggregation modes come from the [L2 request schema](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint.md#l2-book-snapshot).
 
-| Live example, `N = 5`, `m` omitted | Calculation | Tick and exact integer conversion |
-| --- | --- | --- |
-| **BTC perp** (`s=5`, `P=81,174.0`) | `rawTick=10^-(6-5)=0.1`; `sigTick=10^(4-5+1)=1`; max = `1` | `1`; `81,174.0 / 1 = 81,174` ticks. |
-| **ETH perp** (`s=4`, `P=2,624.4`) | `rawTick=10^-(6-4)=0.01`; `sigTick=10^(3-5+1)=0.1`; max = `0.1` | `0.1`; `2,624.4 / 0.1 = 26,244` ticks. |
-| **HMSTR perp** (`s=0`, `P=0.000167`) | `rawTick=10^-(6-0)=0.000001`; `sigTick=10^(-4-5+1)=0.00000001`; max = `0.000001` | `0.000001`; `0.000167 / 0.000001 = 167` ticks. |
-| **HYPE/USDC spot** (`@107`, base HYPE `s=2`, `P=92.446`) | `rawTick=10^-(8-2)=0.000001`; `sigTick=10^(1-5+1)=0.001`; max = `0.001` | `0.001`; `92.446 / 0.001 = 92,446` ticks. |
+| Live example, `N = 5`, `m` omitted                       | Calculation                                                                      | Tick and exact integer conversion              |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **BTC perp** (`s=5`, `P=81,174.0`)                       | `rawTick=10^-(6-5)=0.1`; `sigTick=10^(4-5+1)=1`; max = `1`                       | `1`; `81,174.0 / 1 = 81,174` ticks.            |
+| **ETH perp** (`s=4`, `P=2,624.4`)                        | `rawTick=10^-(6-4)=0.01`; `sigTick=10^(3-5+1)=0.1`; max = `0.1`                  | `0.1`; `2,624.4 / 0.1 = 26,244` ticks.         |
+| **HMSTR perp** (`s=0`, `P=0.000167`)                     | `rawTick=10^-(6-0)=0.000001`; `sigTick=10^(-4-5+1)=0.00000001`; max = `0.000001` | `0.000001`; `0.000167 / 0.000001 = 167` ticks. |
+| **HYPE/USDC spot** (`@107`, base HYPE `s=2`, `P=92.446`) | `rawTick=10^-(8-2)=0.000001`; `sigTick=10^(1-5+1)=0.001`; max = `0.001`          | `0.001`; `92.446 / 0.001 = 92,446` ticks.      |
 
 The live `meta` and `spotMeta` responses supplied the four `szDecimals` values, and the live `l2Book` requests supplied the prices. Perp `meta` exposes `universe[].name` and `universe[].szDecimals`; spot `spotMeta` exposes `universe[].tokens` and `tokens[].szDecimals`. [Perpetual metadata](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/perpetuals.md#retrieve-perpetuals-metadata-universe-and-margin-tables) · [Spot metadata](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint/spot.md#retrieve-spot-metadata)
 

@@ -76,7 +76,12 @@ describe("Tick.makeScale", () => {
   });
 
   it("rejects szDecimals outside [0, D] or non-integer", () => {
-    for (const [kind, sz] of [["perp", 7], ["spot", 9], ["perp", -1], ["perp", 1.5]] as const) {
+    for (const [kind, sz] of [
+      ["perp", 7],
+      ["spot", 9],
+      ["perp", -1],
+      ["perp", 1.5],
+    ] as const) {
       const r = Tick.makeScale(kind, sz);
       expect(r._tag === "err" && r.error._tag, `${kind} ${sz}`).toBe("InvalidScale");
     }

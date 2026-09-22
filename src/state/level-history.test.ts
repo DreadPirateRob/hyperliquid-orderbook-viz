@@ -38,7 +38,10 @@ describe("level history", () => {
     const r = h.get("bid", tick(1000));
     expect(r?.prev).toBe(10);
     expect(r?.live).toBe(4);
-    expect(r?.pulses.map((p) => [p.kind, p.t0])).toEqual([["add", 0], ["ghost", 100]]);
+    expect(r?.pulses.map((p) => [p.kind, p.t0])).toEqual([
+      ["add", 0],
+      ["ghost", 100],
+    ]);
     h.applyLevelEvents([ev("grew", 1000, 4, 12)], 200);
     expect(h.get("bid", tick(1000))?.pulses.at(-1)?.kind).toBe("grew");
     h.applyTrades([{ px: tick(1000), sz: 1, side: "A", time: 0 }], 300);

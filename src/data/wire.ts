@@ -19,10 +19,26 @@ const WireL2Book = z.object({
   fast: z.boolean().optional(),
   levels: z.tuple([z.array(WireLevel), z.array(WireLevel)]),
 });
-const WireBbo = z.object({ coin: z.string(), time: z.number(), bbo: z.tuple([WireLevel.nullable(), WireLevel.nullable()]) });
-const WireTrade = z.object({ coin: z.string(), side: z.enum(["B", "A"]), px: z.string(), sz: z.string(), time: z.number() });
+const WireBbo = z.object({
+  coin: z.string(),
+  time: z.number(),
+  bbo: z.tuple([WireLevel.nullable(), WireLevel.nullable()]),
+});
+const WireTrade = z.object({
+  coin: z.string(),
+  side: z.enum(["B", "A"]),
+  px: z.string(),
+  sz: z.string(),
+  time: z.number(),
+});
 const WireSubscription = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("l2Book"), coin: z.string(), fast: z.boolean().optional(), nSigFigs: z.number().int().nullish(), mantissa: z.number().int().nullish() }),
+  z.object({
+    type: z.literal("l2Book"),
+    coin: z.string(),
+    fast: z.boolean().optional(),
+    nSigFigs: z.number().int().nullish(),
+    mantissa: z.number().int().nullish(),
+  }),
   z.object({ type: z.literal("bbo"), coin: z.string() }),
   z.object({ type: z.literal("trades"), coin: z.string() }),
 ]);
@@ -30,7 +46,10 @@ const WireFrame = z.discriminatedUnion("channel", [
   z.object({ channel: z.literal("l2Book"), data: WireL2Book }),
   z.object({ channel: z.literal("bbo"), data: WireBbo }),
   z.object({ channel: z.literal("trades"), data: z.array(WireTrade) }),
-  z.object({ channel: z.literal("subscriptionResponse"), data: z.object({ method: z.enum(["subscribe", "unsubscribe"]), subscription: WireSubscription }) }),
+  z.object({
+    channel: z.literal("subscriptionResponse"),
+    data: z.object({ method: z.enum(["subscribe", "unsubscribe"]), subscription: WireSubscription }),
+  }),
   z.object({ channel: z.literal("pong") }),
 ]);
 
@@ -97,7 +116,14 @@ export function parseWireMessage(raw: unknown, ctx: WireContext): Result<FeedEve
       if (bids._tag === "err") return bids;
       const asks = parseSide(f.data.levels[1], "ask", ctx.scale);
       if (asks._tag === "err") return asks;
-      return ok({ _tag: "l2Book", stream: f.data.fast === true ? "fast" : "slow", bids: bids.value, asks: asks.value, time: f.data.time, rx: ctx.rx });
+      return ok({
+        _tag: "l2Book",
+        stream: f.data.fast === true ? "fast" : "slow",
+        bids: bids.value,
+        asks: asks.value,
+        time: f.data.time,
+        rx: ctx.rx,
+      });
     }
     case "bbo": {
       if (f.data.coin !== ctx.coin) return ok(IGNORED);
@@ -160,13 +186,18 @@ function parseLevel(l: z.infer<typeof WireLevel>, scale: PriceScale): Result<Lev
   return ok({ px: px.value, sz: sz.value, n: l.n });
 }
 
-function parseSide(levels: ReadonlyArray<z.infer<typeof WireLevel>>, side: Side, scale: PriceScale): Result<ReadonlyArray<Level>, WireError> {
+function parseSide(
+  levels: ReadonlyArray<z.infer<typeof WireLevel>>,
+  side: Side,
+  scale: PriceScale,
+): Result<ReadonlyArray<Level>, WireError> {
   const out: Level[] = [];
   let prev: number | undefined;
   for (const l of levels) {
     const level = parseLevel(l, scale);
     if (level._tag === "err") return level;
-    if (prev !== undefined && (side === "bid" ? level.value.px >= prev : level.value.px <= prev)) return err(new LevelsUnordered(side));
+    if (prev !== undefined && (side === "bid" ? level.value.px >= prev : level.value.px <= prev))
+      return err(new LevelsUnordered(side));
     prev = level.value.px;
     out.push(level.value);
   }

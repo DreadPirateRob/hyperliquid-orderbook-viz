@@ -13,7 +13,14 @@ export type OrderBookProps = {
   readonly feed?: FeedSource;
 };
 
-const INITIAL_STATE: RuntimeState = { trailsOn: true, tapeOn: true, overlaysOn: true, paused: false, cadence: "60", ruler: 12 };
+const INITIAL_STATE: RuntimeState = {
+  trailsOn: true,
+  tapeOn: true,
+  overlaysOn: true,
+  paused: false,
+  cadence: "60",
+  ruler: 12,
+};
 
 /**
  * The widget root. Owns the canvas surfaces and the chrome; data, state and
@@ -37,7 +44,12 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     if (canvas === null) return;
     const feed =
       feedProp ??
-      createHyperliquidFeed({ coin, precision: undefined, fetch: globalThis.fetch.bind(globalThis), WebSocket: globalThis.WebSocket });
+      createHyperliquidFeed({
+        coin,
+        precision: undefined,
+        fetch: globalThis.fetch.bind(globalThis),
+        WebSocket: globalThis.WebSocket,
+      });
     const onStatus = (s: RuntimeStatus): void => {
       if (midRef.current !== null) midRef.current.textContent = s.mid;
       if (groupRef.current !== null) groupRef.current.textContent = s.groupLabel;

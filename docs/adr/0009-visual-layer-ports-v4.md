@@ -13,6 +13,7 @@ v4 is the **source of truth for behaviour and constants** of everything from fee
 The **code shape** is rewritten to this repo's standards (coding-standards skill): integer ticks (ADR 0002) replace floats, typed arrays and pre-allocated stores replace per-frame objects, errors-as-values at the adapter, domain modules for pure calculation, JSDoc on exports. Where standards and v4 conflict, **behaviour wins** and the deviation is recorded here.
 
 Process rules, from the retrospective:
+
 - Re-deriving visuals from prose is prohibited.
 - The visual path is never delegated to unattended agents.
 - Every visual slice ends at a **parity gate**: v4 and the port side by side on the same live feed, screenshots per stage, user sign-off before the next slice.

@@ -55,7 +55,12 @@ describe("engine replay over every recording", () => {
     let historical = true;
     for (const line of lines) {
       if (line._tag !== "frame") continue;
-      const r = parseWireMessage(line.frame, { coin: fx.meta.coin, scale: fx.meta.scale, rx: line.rx, tradesHistorical: historical });
+      const r = parseWireMessage(line.frame, {
+        coin: fx.meta.coin,
+        scale: fx.meta.scale,
+        rx: line.rx,
+        tradesHistorical: historical,
+      });
       if (r._tag === "err") throw r.error;
       if (r.value._tag === "ignored") continue;
       if (r.value._tag === "trades") historical = false;
@@ -96,7 +101,12 @@ describe("engine replay over every recording", () => {
 function firstMid(fx: Fixture): number {
   for (const line of fx.lines) {
     if (line._tag !== "frame") continue;
-    const r = parseWireMessage(line.frame, { coin: fx.meta.coin, scale: fx.meta.scale, rx: line.rx, tradesHistorical: true });
+    const r = parseWireMessage(line.frame, {
+      coin: fx.meta.coin,
+      scale: fx.meta.scale,
+      rx: line.rx,
+      tradesHistorical: true,
+    });
     if (r._tag === "ok" && r.value._tag === "l2Book") {
       const b = r.value.bids[0];
       const a = r.value.asks[0];
@@ -110,18 +120,42 @@ describe("window authority", () => {
   const rx = 1;
   it("slow replaces the whole side; fast replaces from the touch to its worst level", () => {
     const e = createEngine({ gridTick: 10 });
-    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 1), lvl("99.0", 2), lvl("98.0", 3), lvl("97.0", 4)], asks: [], time: 0, rx });
+    e.apply({
+      _tag: "l2Book",
+      stream: "slow",
+      bids: [lvl("100.0", 1), lvl("99.0", 2), lvl("98.0", 3), lvl("97.0", 4)],
+      asks: [],
+      time: 0,
+      rx,
+    });
     e.apply({ _tag: "l2Book", stream: "fast", bids: [lvl("100.0", 1), lvl("98.0", 6)], asks: [], time: 0, rx });
-    expect(e.snapshot().bids.map((l) => [l.px, l.sz])).toEqual([[1000, 1], [980, 6], [970, 4]]);
+    expect(e.snapshot().bids.map((l) => [l.px, l.sz])).toEqual([
+      [1000, 1],
+      [980, 6],
+      [970, 4],
+    ]);
     e.apply({ _tag: "l2Book", stream: "fast", bids: [lvl("98.0", 5)], asks: [], time: 0, rx });
-    expect(e.snapshot().bids.map((l) => [l.px, l.sz]), "100 is better than the fast best, so it is stale").toEqual([[980, 5], [970, 4]]);
+    expect(
+      e.snapshot().bids.map((l) => [l.px, l.sz]),
+      "100 is better than the fast best, so it is stale",
+    ).toEqual([
+      [980, 5],
+      [970, 4],
+    ]);
     e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("99.0", 7)], asks: [], time: 0, rx });
     expect(e.snapshot().bids.map((l) => [l.px, l.sz])).toEqual([[990, 7]]);
   });
 
   it("fast vanishes a level inside its window but keeps levels outside it", () => {
     const e = createEngine({ gridTick: 10 });
-    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 1), lvl("99.0", 2), lvl("98.0", 3)], asks: [], time: 0, rx });
+    e.apply({
+      _tag: "l2Book",
+      stream: "slow",
+      bids: [lvl("100.0", 1), lvl("99.0", 2), lvl("98.0", 3)],
+      asks: [],
+      time: 0,
+      rx,
+    });
     e.drain();
     e.apply({ _tag: "l2Book", stream: "fast", bids: [lvl("100.0", 1), lvl("98.0", 3)], asks: [], time: 0, rx });
     expect(e.snapshot().bids.map((l) => l.px)).toEqual([1000, 980]);
@@ -130,14 +164,24 @@ describe("window authority", () => {
 
   it("bbo owns the touch: drops better levels, replaces its price only when on grid", () => {
     const e = createEngine({ gridTick: 10 });
-    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 1), lvl("99.0", 2)], asks: [lvl("101.0", 1), lvl("102.0", 1)], time: 0, rx });
+    e.apply({
+      _tag: "l2Book",
+      stream: "slow",
+      bids: [lvl("100.0", 1), lvl("99.0", 2)],
+      asks: [lvl("101.0", 1), lvl("102.0", 1)],
+      time: 0,
+      rx,
+    });
     e.drain();
     e.apply({ _tag: "bbo", bid: lvl("99.0", 9), ask: lvl("101.5", 1), time: 0, rx });
     const s = e.snapshot();
     expect(s.bids.map((l) => [l.px, l.sz])).toEqual([[990, 9]]);
     expect(s.asks.map((l) => l.px)).toEqual([1010, 1020]);
     expect(s.bestAsk?.px).toBe(1015);
-    expect(e.drain().map((ev) => [ev.kind, ev.px])).toEqual([["outOfWindow", 1000], ["grew", 990]]);
+    expect(e.drain().map((ev) => [ev.kind, ev.px])).toEqual([
+      ["outOfWindow", 1000],
+      ["grew", 990],
+    ]);
   });
 
   it("goes STALE on a host tick after the fast stream stops, LIVE again on the next push", () => {

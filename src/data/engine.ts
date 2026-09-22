@@ -189,8 +189,10 @@ class BookEngine implements Engine {
       if (opx !== undefined && (nx === undefined || better(side, opx, nx.px))) {
         const osz = s.sz[i] ?? 0;
         if (stream === "slow") this.events.push(levelEvent(side, opx, "vanished", osz, 0, stream, rx));
-        else if (best !== undefined && better(side, opx, best.px)) this.events.push(levelEvent(side, opx, "outOfWindow", osz, 0, stream, rx));
-        else if (worst !== undefined && !better(side, worst.px, opx)) this.events.push(levelEvent(side, opx, "vanished", osz, 0, stream, rx));
+        else if (best !== undefined && better(side, opx, best.px))
+          this.events.push(levelEvent(side, opx, "outOfWindow", osz, 0, stream, rx));
+        else if (worst !== undefined && !better(side, worst.px, opx))
+          this.events.push(levelEvent(side, opx, "vanished", osz, 0, stream, rx));
         else push(out, opx, osz, s.n[i] ?? 0);
         i++;
       } else if (nx !== undefined && (opx === undefined || better(side, nx.px, opx))) {
@@ -241,7 +243,15 @@ function sideLevels(s: SideStore): ReadonlyArray<Level> {
   return out;
 }
 
-function levelEvent(side: Side, px: number, kind: LevelEvent["kind"], from: number, to: number, stream: BookStream, time: number): LevelEvent {
+function levelEvent(
+  side: Side,
+  px: number,
+  kind: LevelEvent["kind"],
+  from: number,
+  to: number,
+  stream: BookStream,
+  time: number,
+): LevelEvent {
   // SAFETY: as above; `px` originates from a Tick and is only ever copied.
   return { side, px: px as Tick, kind, from, to, consumed: 0, cancelled: 0, stream, time };
 }

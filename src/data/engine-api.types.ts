@@ -9,13 +9,7 @@ import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events.ty
  */
 
 /** Widget-visible connection state (spec, story 43). */
-export type ConnectionState =
-  | "CONNECTING"
-  | "SUBSCRIBING"
-  | "LIVE"
-  | "STALE"
-  | "RESYNCING"
-  | "DISCONNECTED";
+export type ConnectionState = "CONNECTING" | "SUBSCRIBING" | "LIVE" | "STALE" | "RESYNCING" | "DISCONNECTED";
 
 /** Immutable view of the fused book at one version. */
 export type BookSnapshot = {

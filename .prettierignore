@@ -1,0 +1,7 @@
+node_modules/
+dist/
+prototype/
+fixtures/
+test-results/
+package-lock.json
+.scratch/

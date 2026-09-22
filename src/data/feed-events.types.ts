@@ -61,10 +61,33 @@ export type MarketInfo = {
  */
 export type FeedEvent =
   | { readonly _tag: "market"; readonly market: MarketInfo; readonly rx: number }
-  | { readonly _tag: "l2Book"; readonly stream: DepthStream; readonly bids: ReadonlyArray<Level>; readonly asks: ReadonlyArray<Level>; readonly time: number; readonly rx: number }
-  | { readonly _tag: "bbo"; readonly bid: Level | undefined; readonly ask: Level | undefined; readonly time: number; readonly rx: number }
-  | { readonly _tag: "trades"; readonly trades: ReadonlyArray<Trade>; readonly historical: boolean; readonly rx: number }
-  | { readonly _tag: "ack"; readonly method: "subscribe" | "unsubscribe"; readonly subscription: Subscription; readonly rx: number }
+  | {
+      readonly _tag: "l2Book";
+      readonly stream: DepthStream;
+      readonly bids: ReadonlyArray<Level>;
+      readonly asks: ReadonlyArray<Level>;
+      readonly time: number;
+      readonly rx: number;
+    }
+  | {
+      readonly _tag: "bbo";
+      readonly bid: Level | undefined;
+      readonly ask: Level | undefined;
+      readonly time: number;
+      readonly rx: number;
+    }
+  | {
+      readonly _tag: "trades";
+      readonly trades: ReadonlyArray<Trade>;
+      readonly historical: boolean;
+      readonly rx: number;
+    }
+  | {
+      readonly _tag: "ack";
+      readonly method: "subscribe" | "unsubscribe";
+      readonly subscription: Subscription;
+      readonly rx: number;
+    }
   | { readonly _tag: "connection"; readonly event: ConnectionEvent; readonly rx: number }
   | { readonly _tag: "tick"; readonly rx: number };
 

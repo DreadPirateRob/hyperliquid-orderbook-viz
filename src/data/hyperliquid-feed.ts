@@ -68,14 +68,23 @@ class Session {
     const meta = await fetchMarketMeta(this.options.coin, this.options.fetch);
     if (this.stopped) return;
     if (meta._tag === "err") {
-      this.listener({ _tag: "connection", event: { _tag: "rejected", line: "info", why: meta.error.message }, rx: Date.now() });
+      this.listener({
+        _tag: "connection",
+        event: { _tag: "rejected", line: "info", why: meta.error.message },
+        rx: Date.now(),
+      });
       this.listener({ _tag: "connection", event: { _tag: "closed", reason: meta.error.message }, rx: Date.now() });
       return;
     }
     const mark = meta.value.mark ?? 1;
     this.scale = meta.value.scale;
-    this.precision = this.options.precision ?? Grouping.deriveOptions(mark, meta.value.scale)[0]?.precision ?? { _tag: "full" };
-    this.listener({ _tag: "market", market: { coin: this.options.coin, scale: this.scale, precision: this.precision, mark }, rx: Date.now() });
+    this.precision = this.options.precision ??
+      Grouping.deriveOptions(mark, meta.value.scale)[0]?.precision ?? { _tag: "full" };
+    this.listener({
+      _tag: "market",
+      market: { coin: this.options.coin, scale: this.scale, precision: this.precision, mark },
+      rx: Date.now(),
+    });
     this.connect();
   }
 
@@ -89,7 +98,8 @@ class Session {
       this.acked.fast = false;
       this.tradesHistorical = true;
       this.listener({ _tag: "connection", event: { _tag: "open" }, rx: Date.now() });
-      for (const stream of ["slow", "fast"] as const) ws.send(JSON.stringify({ method: "subscribe", subscription: this.bookSubscription(stream) }));
+      for (const stream of ["slow", "fast"] as const)
+        ws.send(JSON.stringify({ method: "subscribe", subscription: this.bookSubscription(stream) }));
       ws.send(JSON.stringify({ method: "subscribe", subscription: { type: "bbo", coin: this.options.coin } }));
       ws.send(JSON.stringify({ method: "subscribe", subscription: { type: "trades", coin: this.options.coin } }));
       clearInterval(this.ping);
@@ -125,9 +135,18 @@ class Session {
       this.listener({ _tag: "connection", event: { _tag: "rejected", line: data.slice(0, 200), why: "not JSON" }, rx });
       return;
     }
-    const r = parseWireMessage(raw, { coin: this.options.coin, scale: this.scale, rx, tradesHistorical: this.tradesHistorical });
+    const r = parseWireMessage(raw, {
+      coin: this.options.coin,
+      scale: this.scale,
+      rx,
+      tradesHistorical: this.tradesHistorical,
+    });
     if (r._tag === "err") {
-      this.listener({ _tag: "connection", event: { _tag: "rejected", line: data.slice(0, 200), why: r.error.message }, rx });
+      this.listener({
+        _tag: "connection",
+        event: { _tag: "rejected", line: data.slice(0, 200), why: r.error.message },
+        rx,
+      });
       return;
     }
     const ev = r.value;

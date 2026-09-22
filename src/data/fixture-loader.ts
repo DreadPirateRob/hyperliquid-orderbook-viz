@@ -30,7 +30,10 @@ export class FixtureUnavailable extends Error {
  * @param fetchFn - The fetch implementation.
  * @returns The fixture or a tagged error.
  */
-export async function loadFixture(url: string, fetchFn: Fetch): Promise<Result<Fixture, FixtureUnavailable | MalformedFixture | Tick.InvalidScale>> {
+export async function loadFixture(
+  url: string,
+  fetchFn: Fetch,
+): Promise<Result<Fixture, FixtureUnavailable | MalformedFixture | Tick.InvalidScale>> {
   let buffer: ArrayBuffer;
   try {
     const res = await fetchFn(url);
@@ -41,6 +44,8 @@ export async function loadFixture(url: string, fetchFn: Fetch): Promise<Result<F
   }
   const head = new Uint8Array(buffer, 0, Math.min(2, buffer.byteLength));
   const gzip = head[0] === 0x1f && head[1] === 0x8b;
-  const text = gzip ? await new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"))).text() : new TextDecoder().decode(buffer);
+  const text = gzip
+    ? await new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"))).text()
+    : new TextDecoder().decode(buffer);
   return parseFixture(text);
 }

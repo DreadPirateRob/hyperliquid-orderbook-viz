@@ -7,13 +7,11 @@ import * as Tick from "./tick";
  * @returns An arbitrary over parsed price scales.
  */
 export function priceScale(): fc.Arbitrary<Tick.PriceScale> {
-  return fc
-    .tuple(fc.constantFrom("perp", "spot"), fc.integer({ min: 0, max: 6 }))
-    .map(([kind, szDecimals]) => {
-      const r = Tick.makeScale(kind, szDecimals);
-      if (r._tag === "err") throw r.error;
-      return r.value;
-    });
+  return fc.tuple(fc.constantFrom("perp", "spot"), fc.integer({ min: 0, max: 6 })).map(([kind, szDecimals]) => {
+    const r = Tick.makeScale(kind, szDecimals);
+    if (r._tag === "err") throw r.error;
+    return r.value;
+  });
 }
 
 /**

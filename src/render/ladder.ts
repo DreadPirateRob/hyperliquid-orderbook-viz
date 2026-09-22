@@ -46,9 +46,29 @@ export function ladderLayout(width: number, trailsOn: boolean, tapeOn: boolean):
     const heat = block - 30;
     const px = heat - 12;
     const trail = 8;
-    return { px, heat, lane: heat + 18, block, blockW: BLOCK_W, size: 0, trail, trailW: Math.max(120, px - 150 - trail), ladderW };
+    return {
+      px,
+      heat,
+      lane: heat + 18,
+      block,
+      blockW: BLOCK_W,
+      size: 0,
+      trail,
+      trailW: Math.max(120, px - 150 - trail),
+      ladderW,
+    };
   }
-  return { px: 90, heat: 110, lane: 130, block: 230, blockW: Math.min(360, ladderW - 230 - 260), size: 200, trail: 215, trailW: 0, ladderW };
+  return {
+    px: 90,
+    heat: 110,
+    lane: 130,
+    block: 230,
+    blockW: Math.min(360, ladderW - 230 - 260),
+    size: 200,
+    trail: 215,
+    trailW: 0,
+    ladderW,
+  };
 }
 
 /** v4 pulse decay constants (ms). */
@@ -70,13 +90,24 @@ export function persistence(row: FrameRow, t: number): number {
 }
 
 /** v4 `heatColour`: side colour blended toward hot above 85 % of the ruler max, alpha by size and persistence. */
-export function heatColour(row: FrameRow, side: "bid" | "ask", maxSz: number, t: number): { readonly c: readonly [number, number, number]; readonly a: number } {
+export function heatColour(
+  row: FrameRow,
+  side: "bid" | "ask",
+  maxSz: number,
+  t: number,
+): { readonly c: readonly [number, number, number]; readonly a: number } {
   const c = sideColour(side);
   const sat = 0.35 + 0.65 * persistence(row, t);
   const rel = row.shown / maxSz;
   const hot = rel > 0.85 ? (rel - 0.85) / 0.15 : 0;
   const blended: readonly [number, number, number] =
-    hot > 0 ? [c[0] + (PALETTE.hot[0] - c[0]) * hot, c[1] + (PALETTE.hot[1] - c[1]) * hot, c[2] + (PALETTE.hot[2] - c[2]) * hot] : c;
+    hot > 0
+      ? [
+          c[0] + (PALETTE.hot[0] - c[0]) * hot,
+          c[1] + (PALETTE.hot[1] - c[1]) * hot,
+          c[2] + (PALETTE.hot[2] - c[2]) * hot,
+        ]
+      : c;
   return { c: blended, a: (0.15 + 0.85 * rel ** 0.7) * sat };
 }
 
@@ -195,7 +226,8 @@ function drawRuler(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayou
     ctx.fillRect(0, Math.round(yy), W, 1);
     const edgeY = k === 0 ? yy : yy - ROW;
     const rr = S.rows.find((r) => r.y === edgeY);
-    if (rr !== undefined && rr.cum > 0) text(ctx, `Σ ${formatSize(rr.cum)}`, X.block + X.blockW + 8, yy + (k === 0 ? 8 : -8), PALETTE.dim);
+    if (rr !== undefined && rr.cum > 0)
+      text(ctx, `Σ ${formatSize(rr.cum)}`, X.block + X.blockW + 8, yy + (k === 0 ? 8 : -8), PALETTE.dim);
   }
 }
 

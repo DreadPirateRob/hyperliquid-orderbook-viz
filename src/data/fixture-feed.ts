@@ -32,7 +32,11 @@ export function createFixtureFeed(fixture: Fixture, options: FixtureFeedOptions)
       const rx0 = fixture.lines[0]?.rx ?? fixture.meta.startedAt;
       const mark = firstMid(fixture);
       const emit = (e: FeedEvent): void => listener(e);
-      emit({ _tag: "market", market: { coin: fixture.meta.coin, scale: fixture.meta.scale, precision: fixture.meta.precision, mark }, rx: t0 });
+      emit({
+        _tag: "market",
+        market: { coin: fixture.meta.coin, scale: fixture.meta.scale, precision: fixture.meta.precision, mark },
+        rx: t0,
+      });
       emit({ _tag: "connection", event: { _tag: "connecting" }, rx: t0 });
       emit({ _tag: "connection", event: { _tag: "open" }, rx: t0 });
       let tradesHistorical = true;
@@ -61,16 +65,34 @@ export function createFixtureFeed(fixture: Fixture, options: FixtureFeedOptions)
                 tradesHistorical = true;
                 break;
               case "resubscribe":
-                emit({ _tag: "market", market: { coin: fixture.meta.coin, scale: fixture.meta.scale, precision: precisionOf(line.control.to), mark }, rx: at });
+                emit({
+                  _tag: "market",
+                  market: {
+                    coin: fixture.meta.coin,
+                    scale: fixture.meta.scale,
+                    precision: precisionOf(line.control.to),
+                    mark,
+                  },
+                  rx: at,
+                });
                 break;
               default:
                 casesHandled(line.control);
             }
             continue;
           }
-          const r = parseWireMessage(line.frame, { coin: fixture.meta.coin, scale: fixture.meta.scale, rx: at, tradesHistorical });
+          const r = parseWireMessage(line.frame, {
+            coin: fixture.meta.coin,
+            scale: fixture.meta.scale,
+            rx: at,
+            tradesHistorical,
+          });
           if (r._tag === "err") {
-            emit({ _tag: "connection", event: { _tag: "rejected", line: JSON.stringify(line.frame).slice(0, 200), why: r.error.message }, rx: at });
+            emit({
+              _tag: "connection",
+              event: { _tag: "rejected", line: JSON.stringify(line.frame).slice(0, 200), why: r.error.message },
+              rx: at,
+            });
             continue;
           }
           if (r.value._tag === "ignored") continue;
@@ -93,7 +115,12 @@ export function createFixtureFeed(fixture: Fixture, options: FixtureFeedOptions)
 function firstMid(fixture: Fixture): number {
   for (const line of fixture.lines) {
     if (line._tag !== "frame") continue;
-    const r = parseWireMessage(line.frame, { coin: fixture.meta.coin, scale: fixture.meta.scale, rx: 0, tradesHistorical: true });
+    const r = parseWireMessage(line.frame, {
+      coin: fixture.meta.coin,
+      scale: fixture.meta.scale,
+      rx: 0,
+      tradesHistorical: true,
+    });
     if (r._tag !== "ok" || r.value._tag !== "l2Book") continue;
     const b = r.value.bids[0];
     const a = r.value.asks[0];
