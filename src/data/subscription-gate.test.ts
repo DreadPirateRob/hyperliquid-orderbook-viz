@@ -140,3 +140,41 @@ describe("precision-swap recording", () => {
     expect(seenGrids.size, "three precisions were live across the recording").toBe(3);
   });
 });
+
+describe("grid change at fixed precision", () => {
+  it("keeps accepting the synthetic recording's pushes as the mid crosses a decade", () => {
+    const parsed = parseFixture(gunzipSync(readFileSync("fixtures/btc-grid-change.jsonl.gz")).toString("utf8"));
+    if (parsed._tag === "err") throw parsed.error;
+    const fx = parsed.value;
+    expect(fx.meta.synthetic, "grid change at fixed precision was never observed live").toBe(true);
+    let mid = 99_989;
+    let grid = Grouping.gridTickFor(mid, fx.meta.precision, fx.meta.scale);
+    const grids = new Set<number>([grid]);
+    let pushes = 0;
+    for (const line of fx.lines) {
+      if (line._tag !== "frame") continue;
+      const r = parseWireMessage(line.frame, {
+        coin: fx.meta.coin,
+        scale: fx.meta.scale,
+        rx: line.rx,
+        tradesHistorical: false,
+      });
+      if (r._tag === "err") throw r.error;
+      if (r.value._tag !== "l2Book") continue;
+      pushes++;
+      const b = r.value.bids[0];
+      const a = r.value.asks[0];
+      if (b === undefined || a === undefined) continue;
+      mid = ((b.px + a.px) / 2) * 10 ** -fx.meta.scale.decimals;
+      // The widget re-derives the grid from the mid on every push; the precision never changes.
+      grid = Grouping.gridTickFor(mid, fx.meta.precision, fx.meta.scale);
+      grids.add(grid);
+    }
+    expect(pushes).toBeGreaterThan(100);
+    expect(mid).toBeGreaterThan(100_000);
+    expect(
+      [...grids].toSorted((x, y) => x - y),
+      "the row step coarsens as the price crosses 100k",
+    ).toEqual([10, 100]);
+  });
+});

@@ -44,3 +44,16 @@ describe("Grouping.gridTickFor", () => {
     expect(Grouping.gridTickFor(81000, { _tag: "full" }, btc)).toBe(1);
   });
 });
+
+describe("grid change across a decade", () => {
+  it("re-derives the option set when the mid crosses 100k, as the synthetic recording does", () => {
+    const below = Grouping.deriveOptions(99_989, btc);
+    const above = Grouping.deriveOptions(100_010, btc);
+    expect(below.map((o) => o.label)).toEqual(["$1", "$2", "$5", "$10", "$100"]);
+    expect(above.map((o) => o.label)).toEqual(["$10", "$20", "$50", "$100", "$1000"]);
+    // the same subscription precision now means a coarser row step
+    const sig5 = { _tag: "aggregated", nSigFigs: 5, mantissa: undefined } as const;
+    expect(Grouping.gridTickFor(99_989, sig5, btc)).toBe(10);
+    expect(Grouping.gridTickFor(100_010, sig5, btc)).toBe(100);
+  });
+});

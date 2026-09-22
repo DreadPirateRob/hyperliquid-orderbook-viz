@@ -15,7 +15,7 @@ import { hudText } from "./hud";
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
 import type { FrameSample } from "../state/frame-sample.types";
-import type { ConnectionState } from "../data/engine-api.types";
+import type { BookSnapshot, ConnectionState } from "../data/engine-api.types";
 
 /**
  * The imperative shell behind `<OrderBook>` (ADR 0008): owns the engine,
@@ -99,6 +99,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let gridTick = 1;
   let groupLabel = "–";
   let groupOptions: ReadonlyArray<GroupOption> = [];
+  let decade: number | undefined;
   const engine: Engine = createEngine({ gridTick, scale: undefined });
   const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   const reducedMotion = (): boolean => reducedMotionQuery.matches;
@@ -142,6 +143,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       gridTick = Grouping.gridTickFor(event.market.mark, event.market.precision, scale);
       groupOptions = Grouping.deriveOptions(event.market.mark, scale);
       groupLabel = groupOptions.find((o) => o.gridTick === gridTick)?.label ?? "–";
+      decade = Math.floor(Math.log10(event.market.mark));
       const sameCoin = market?.coin === event.market.coin;
       market = event.market;
       engine.reset({ gridTick, scale });
@@ -177,6 +179,20 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     lastVersion = snapshot.version;
     ctx.fillStyle = PALETTE.bg;
     ctx.fillRect(0, 0, width, height);
+    // v4 re-derives the grid when the mid changes decade: the same precision means a coarser step.
+    const midTicks = midOf(snapshot);
+    if (midTicks !== undefined && scale !== undefined && market !== undefined) {
+      const mid = midTicks * 10 ** -scale.decimals;
+      const nextDecade = Math.floor(Math.log10(mid));
+      if (nextDecade !== decade) {
+        decade = nextDecade;
+        groupOptions = Grouping.deriveOptions(mid, scale);
+        gridTick = Grouping.gridTickFor(mid, market.precision, scale);
+        groupLabel = groupOptions.find((o) => o.gridTick === gridTick)?.label ?? "–";
+        engine.reset({ gridTick, scale });
+        sampler.reset("grid");
+      }
+    }
     const events = engine.drain();
     const trades = engine.drainTrades();
     const migrations = engine.drainMigrations();
@@ -273,4 +289,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       stopFeed();
     },
   };
+}
+
+/** Mid in quote units from the fused touch, or `undefined` before both sides exist. */
+function midOf(snapshot: BookSnapshot): number | undefined {
+  const b = snapshot.bestBid ?? snapshot.bids[0];
+  const a = snapshot.bestAsk ?? snapshot.asks[0];
+  return b === undefined || a === undefined ? undefined : (b.px + a.px) / 2;
 }
