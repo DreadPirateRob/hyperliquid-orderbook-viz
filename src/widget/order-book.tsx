@@ -1,9 +1,11 @@
 import type { JSX } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pause, Play } from "lucide-react";
 import type { GroupOption } from "../domain/grouping";
 import type { FeedSource } from "../data/feed-events.types";
 import type { Fetch, MarketStats, MarketSummary } from "../data/hyperliquid-info";
 import { fetchStats, fetchUniverse } from "../data/hyperliquid-info";
+import { createInfoFetch } from "../data/info-cache";
 import type { PrefsStore } from "../state/prefs";
 import { PairPicker } from "./pair-picker";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
@@ -98,7 +100,9 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const pairButtonRef = useRef<HTMLButtonElement>(null);
   const feedProp = props.feed;
   const prefs = props.prefs;
-  const fetchFn = props.fetch ?? globalThis.fetch.bind(globalThis);
+  // One shared, deduplicating fetch: feed boot, pair list and stats ask for the
+  // same payloads, and the venue rate-limits `/info`.
+  const fetchFn = useMemo(() => createInfoFetch(props.fetch ?? globalThis.fetch.bind(globalThis)), [props.fetch]);
   const onStateChange = props.onStateChange;
 
   // User-driven changes notify the embedder from the handler itself, not from an effect.
@@ -205,12 +209,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     if (canvas === null) return;
     const feed =
       feedProp ??
-      createHyperliquidFeed({
-        coin,
-        precision: undefined,
-        fetch: globalThis.fetch.bind(globalThis),
-        WebSocket: globalThis.WebSocket,
-      });
+      createHyperliquidFeed({ coin, precision: undefined, fetch: fetchFn, WebSocket: globalThis.WebSocket });
     const onStatus = (s: RuntimeStatus): void => {
       if (midRef.current !== null) midRef.current.textContent = s.mid;
       if (groupRef.current !== null) groupRef.current.textContent = s.groupLabel;
@@ -233,7 +232,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       runtime.dispose();
       runtimeRef.current = null;
     };
-  }, [feedProp, coin]);
+  }, [feedProp, coin, fetchFn]);
 
   useEffect(() => {
     const p = prefs?.get();
@@ -328,8 +327,14 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
           metrics
         </button>
         <MarketStatsBar stats={stats[coin]} />
-        <button type="button" className="orderbook-toggle" aria-pressed={paused} onClick={togglePause}>
-          {paused ? "▶" : "⏸"}
+        <button
+          type="button"
+          className="orderbook-toggle orderbook-icon"
+          aria-pressed={paused}
+          aria-label={paused ? "Resume" : "Pause"}
+          onClick={togglePause}
+        >
+          {paused ? <Play size={12} aria-hidden /> : <Pause size={12} aria-hidden />}
         </button>
         <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
           CONNECTING

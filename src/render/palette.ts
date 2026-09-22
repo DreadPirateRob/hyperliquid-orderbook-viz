@@ -57,6 +57,41 @@ export function text(
   ctx.fillText(s, x, y);
 }
 
+/**
+ * Draw a small direction triangle. Canvas cannot host `lucide-react`, and the
+ * widget uses no emoji or glyph characters, so the mark is a path.
+ *
+ * @param ctx - Canvas context.
+ * @param x - Left edge in CSS px.
+ * @param y - Vertical centre in CSS px.
+ * @param size - Width and height of the triangle.
+ * @param up - True points up (price rose), false down.
+ * @param fill - Fill style.
+ */
+export function directionMark(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  up: boolean,
+  fill: string,
+): void {
+  const half = size / 2;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  if (up) {
+    ctx.moveTo(x + half, y - half);
+    ctx.lineTo(x + size, y + half);
+    ctx.lineTo(x, y + half);
+  } else {
+    ctx.moveTo(x, y - half);
+    ctx.lineTo(x + size, y - half);
+    ctx.lineTo(x + half, y + half);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 /** v4's `fmtSz`: `1.2k`, `12.3`, `0.123`. */
 export function formatSize(sz: number): string {
   return sz >= 1000 ? `${(sz / 1000).toFixed(1)}k` : sz.toFixed(sz < 10 ? 3 : 1);
@@ -102,15 +137,18 @@ export function pill(
   fill: string,
   size = 12,
   height = 18,
+  direction: -1 | 0 | 1 = 0,
 ): void {
   ctx.font = `600 ${size}px ${FONT}`;
   ctx.textBaseline = "middle";
-  const width = ctx.measureText(label).width + 10;
+  const mark = direction === 0 ? 0 : size - 2;
+  const width = ctx.measureText(label).width + 10 + mark;
   const left = align === "right" ? x - width + 4 : align === "center" ? x - width / 2 : x;
   ctx.fillStyle = fill;
   ctx.beginPath();
   ctx.roundRect(left, pillTop(y, height), width, height, 3);
   ctx.fill();
-  const tx = align === "right" ? x - 1 : align === "center" ? x : x + 5;
+  if (direction !== 0) directionMark(ctx, left + 5, y, mark - 2, direction > 0, PALETTE.bg);
+  const tx = align === "right" ? x - 1 : align === "center" ? x + mark / 2 : x + 5 + mark;
   text(ctx, label, tx, y, PALETTE.bg, align === "right" ? "right" : align, size, true);
 }

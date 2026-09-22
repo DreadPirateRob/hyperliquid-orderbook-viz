@@ -184,7 +184,7 @@ describe("spine tag alignment", () => {
     expect(pillText?.x).toBe(cx + 30 - 1);
     // the row price is centred on the spine, so the right-aligned pill must start left of its left edge
     const priceHalfWidth = ("85546".length * 7.2) / 2;
-    const pillWidth = "▼ 85546.0".length * 7.2 + 10;
+    const pillWidth = "85546.0".length * 7.2 + 10 + 10;
     expect(cx + 30 + 4 - pillWidth).toBeLessThan((rowPrice?.x ?? 0) - priceHalfWidth);
   });
 

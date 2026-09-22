@@ -1,9 +1,10 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Star } from "lucide-react";
 import type { MarketStats, MarketSummary } from "../data/hyperliquid-info";
 
 /**
- * The pair popover: search, Perp/Spot/★ tabs, keyboard navigation and
+ * The pair popover: search, Perp/Spot/favourites tabs, keyboard navigation and
  * favourites. It traps focus while open and returns it to the trigger on
  * close, so the widget stays operable without a mouse.
  */
@@ -25,7 +26,7 @@ export type PairPickerProps = {
 const TABS: ReadonlyArray<{ readonly id: Tab; readonly label: string }> = [
   { id: "perp", label: "Perp" },
   { id: "spot", label: "Spot" },
-  { id: "fav", label: "★" },
+  { id: "fav", label: "Saved" },
 ];
 
 /**
@@ -174,8 +175,15 @@ function PairRow(props: {
       data-cursor={props.cursor ? "1" : "0"}
       onClick={onClick}
     >
-      <button type="button" className="orderbook-star" aria-pressed={props.favourite} onClick={onStar} tabIndex={-1}>
-        {props.favourite ? "★" : "☆"}
+      <button
+        type="button"
+        className="orderbook-star"
+        aria-pressed={props.favourite}
+        aria-label={props.favourite ? `Unsave ${market.display}` : `Save ${market.display}`}
+        onClick={onStar}
+        tabIndex={-1}
+      >
+        <Star size={12} aria-hidden fill={props.favourite ? "currentColor" : "none"} />
       </button>
       <span className="orderbook-pairname">{market.display}</span>
       <span className="orderbook-pairpx">{stats === undefined ? "–" : formatPrice(stats.mark)}</span>

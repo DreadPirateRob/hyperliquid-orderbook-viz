@@ -376,11 +376,8 @@ function drawBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLa
   const ty = tagY(S, lastPx, d.gridTick);
   const lc: Rgb =
     last === undefined ? PALETTE.mid : last.dir > 0 ? PALETTE.bid : last.dir < 0 ? PALETTE.ask : PALETTE.neutral;
-  const lbl =
-    last === undefined
-      ? Tick.formatMid(S.mid, d.scale)
-      : `${last.dir > 0 ? "▲ " : last.dir < 0 ? "▼ " : ""}${Tick.format(last.px, d.scale)}`;
-  pill(ctx, lbl, X.px, ty, "right", rgba(lc, 0.95));
+  const lbl = last === undefined ? Tick.formatMid(S.mid, d.scale) : Tick.format(last.px, d.scale);
+  pill(ctx, lbl, X.px, ty, "right", rgba(lc, 0.95), 12, 18, last?.dir ?? 0);
   // stacked share bar: ask part above the boundary, bid part below (height ∝ share), sizes beside
   const bx = X.block + X.blockW + 34;
   const bw = 10;
@@ -436,7 +433,7 @@ function drawRuler(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayou
     const edgeY = k === 0 ? yy : yy - ROW;
     const rr = S.rows.find((r) => r.y === edgeY);
     if (rr !== undefined && rr.cum > 0)
-      text(ctx, `Σ ${formatSize(rr.cum)}`, X.block + X.blockW + 8, yy + (k === 0 ? 8 : -8), PALETTE.dim);
+      text(ctx, `cum ${formatSize(rr.cum)}`, X.block + X.blockW + 8, yy + (k === 0 ? 8 : -8), PALETTE.dim);
   }
 }
 

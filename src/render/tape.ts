@@ -1,7 +1,7 @@
 import * as Tick from "../domain/tick";
 import type { FrameSample } from "../state/frame-sample.types";
 import type { DrawContext } from "./draw.types";
-import { PALETTE, formatSize, rgba, text } from "./palette";
+import { PALETTE, directionMark, formatSize, rgba, text } from "./palette";
 
 /**
  * v4's `drawTape`: the prints column on the right. Rows fade over a minute,
@@ -54,10 +54,11 @@ export function drawTape(d: DrawContext, S: FrameSample): void {
     ctx.fillStyle = rgba(colour, 0.18 + 0.25 * rel);
     ctx.fillRect(x0 + TAPE_W - 8 - 60 * rel, y + 4, 60 * rel, ROW_H - 8);
     text(ctx, formatAge(age), cAge, y + ROW_H / 2, PALETTE.dim, "left", 10);
-    // v4 keeps a glyph slot even at dir 0 so the price column stays aligned
-    const arrow = r.dir > 0 ? "▲" : r.dir < 0 ? "▼" : " ";
-    text(ctx, `${arrow} ${Tick.format(r.px, d.scale)}`, cPx, y + ROW_H / 2, rgba(colour, 1), "left", 11, hot);
-    const size = `${formatSize(r.sz)}${r.n > 1 ? ` ×${r.n}` : ""}`;
+    // v4 draws an arrow glyph here; the widget uses no glyph characters, so the mark is a path
+    // and the price keeps its column whether or not the print moved.
+    if (r.dir !== 0) directionMark(ctx, cPx, y + ROW_H / 2, 7, r.dir > 0, rgba(colour, 1));
+    text(ctx, Tick.format(r.px, d.scale), cPx + 11, y + ROW_H / 2, rgba(colour, 1), "left", 11, hot);
+    const size = `${formatSize(r.sz)}${r.n > 1 ? ` x${r.n}` : ""}`;
     text(ctx, size, cSz, y + ROW_H / 2, hot ? rgba(PALETTE.hot, 1) : PALETTE.text, "right", 11, hot);
     ctx.globalAlpha = 1;
     y += ROW_H;
