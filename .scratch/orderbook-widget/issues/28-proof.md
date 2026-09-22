@@ -4,10 +4,10 @@
 
 **Blocked by:** 25, 27
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 25, 27
 
 - [ ] Benches labelled synthetic/emulated per ADR 0006
