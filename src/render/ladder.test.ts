@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as Tick from "../domain/tick";
-import { pulseState, trailX, yOf } from "./ladder";
+import { pulseState, tagY, trailX, yOf } from "./ladder";
 
 function tick(n: number): Tick.Tick {
   const r = Tick.fromInteger(n);
@@ -70,5 +70,35 @@ describe("yOf", () => {
     expect(yOf(rows, 1030)).toBe(11);
     expect(yOf(rows, 990)).toBe(55);
     expect(yOf([], 5)).toBe(-100);
+  });
+});
+
+describe("tagY", () => {
+  const rows = [1020, 1010, 1000].map((px, i) => ({
+    i,
+    y: i * 22,
+    px: tick(px),
+    side: "bid" as const,
+    shown: 0,
+    live: 0,
+    prev: 0,
+    cum: 0,
+    inRuler: true,
+    field: 0,
+    pulses: [],
+    first: 0,
+    trail: [],
+  }));
+  const frame = { rows, ribY: 33 } as unknown as Parameters<typeof tagY>[0];
+
+  it("centres the tag on the print's row", () => {
+    expect(tagY(frame, 1010, 10)).toBe(33);
+    expect(tagY(frame, 1012, 10), "within half a grid step").toBe(33);
+  });
+
+  it("clamps to the nearest row centre when the print is off screen, never to a row edge", () => {
+    expect(tagY(frame, 1100, 10)).toBe(11);
+    expect(tagY(frame, 900, 10)).toBe(55);
+    for (const px of [1100, 900, 1010]) expect((tagY(frame, px, 10) - 11) % 22).toBe(0);
   });
 });

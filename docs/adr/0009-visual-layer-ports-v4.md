@@ -28,3 +28,7 @@ Process rules, from the retrospective:
 ## Amendment (Centre spine view)
 
 v4 keeps the tape column visible in the spine view. The user's standing preference is that the spine carries no trails and no tape, so the port hides both there **and** reclaims their columns: the spine centres in the full canvas width. Everything else in `drawSpine` (gap 60, half capped at 420, profile alpha 0.07/stroke 0.45, heat, pulses, size labels outboard, ruler lines, boundary with the last-trade tag at `cx + 30` and the share bar at `cx − 300`) is v4's.
+
+## Amendment (Last-trade tag alignment)
+
+v4 places the last-trade tag at `row ? row.y + ROW/2 : S.ribY`. `ribY` is a row **top**, so whenever the last print is not on a visible row — the usual case right after the price leaves the window — the pill renders half a row out of alignment with the ladder. The port keeps v4's on-row placement and replaces the fallback with the nearest row centre (`tagY`), so the tag is always on the row grid.

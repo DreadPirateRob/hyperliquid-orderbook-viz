@@ -6,7 +6,7 @@ import type { PriceScale } from "../domain/tick";
 import type { DrawContext } from "./draw.types";
 import { TAPE_W } from "./tape";
 import type { Rgb } from "./palette";
-import { FONT, PALETTE, formatSize, rgba, sideColour, text } from "./palette";
+import { FONT, PALETTE, formatSize, pill, rgba, sideColour, text } from "./palette";
 
 /**
  * v4's `drawLadder`: the classic ladder view. This module carries the static
@@ -304,14 +304,7 @@ function drawTouchPaths(
   ctx.restore();
   for (const side of sides) {
     const yy = yOf(S.rows, side.now);
-    const lbl = Tick.format(side.now, scale);
-    ctx.font = `600 9px ${FONT}`;
-    const tw = ctx.measureText(lbl).width + 6;
-    ctx.fillStyle = rgba(side.c, 0.95);
-    ctx.beginPath();
-    ctx.roundRect(X.trail + X.trailW - tw - 2, yy + side.dy - 6, tw, 12, 2);
-    ctx.fill();
-    text(ctx, lbl, X.trail + X.trailW - 5, yy + side.dy, PALETTE.bg, "right", 9, true);
+    pill(ctx, Tick.format(side.now, scale), X.trail + X.trailW - 1, yy + side.dy, "right", rgba(side.c, 0.95), 9, 12);
   }
 }
 
@@ -322,21 +315,14 @@ function drawBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLa
   ctx.fillRect(0, y - 0.5, X.ladderW, 1);
   const last = S.lastTrade;
   const lastPx = last?.px ?? S.mid;
-  const row = S.rows.find((r) => Math.abs(r.px - lastPx) < d.gridTick / 2 + 1e-9);
-  const ty = row === undefined ? y : row.y + ROW / 2;
+  const ty = tagY(S, lastPx, d.gridTick);
   const lc: Rgb =
     last === undefined ? PALETTE.mid : last.dir > 0 ? PALETTE.bid : last.dir < 0 ? PALETTE.ask : PALETTE.neutral;
   const lbl =
     last === undefined
       ? Tick.formatMid(S.mid, d.scale)
       : `${last.dir > 0 ? "▲ " : last.dir < 0 ? "▼ " : ""}${Tick.format(last.px, d.scale)}`;
-  ctx.font = `600 12px ${FONT}`;
-  const tw = ctx.measureText(lbl).width + 10;
-  ctx.fillStyle = rgba(lc, 0.95);
-  ctx.beginPath();
-  ctx.roundRect(X.px - tw + 4, ty - 9, tw, 18, 3);
-  ctx.fill();
-  text(ctx, lbl, X.px - 1, ty, PALETTE.bg, "right", 12, true);
+  pill(ctx, lbl, X.px, ty, "right", rgba(lc, 0.95));
   // stacked share bar: ask part above the boundary, bid part below (height ∝ share), sizes beside
   const bx = X.block + X.blockW + 34;
   const bw = 10;
@@ -394,6 +380,27 @@ function drawRuler(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayou
     if (rr !== undefined && rr.cum > 0)
       text(ctx, `Σ ${formatSize(rr.cum)}`, X.block + X.blockW + 8, yy + (k === 0 ? 8 : -8), PALETTE.dim);
   }
+}
+
+/**
+ * Vertical centre for the last-trade tag: its own row when the price is on
+ * screen, otherwise the nearest row centre. v4 fell back to `S.ribY`, a row
+ * *top*, which left the pill straddling two rows whenever the print sat
+ * outside the window (ADR 0009 amendment).
+ *
+ * @param S - The frame sample.
+ * @param px - Price to tag, in raw ticks.
+ * @param gridTick - Row step in raw ticks.
+ * @returns y of the tag's centre in CSS px.
+ */
+export function tagY(S: FrameSample, px: number, gridTick: number): number {
+  const exact = S.rows.find((r) => Math.abs(r.px - px) < gridTick / 2 + 1e-9);
+  if (exact !== undefined) return exact.y + ROW / 2;
+  const first = S.rows[0];
+  const last = S.rows[S.rows.length - 1];
+  if (first === undefined || last === undefined) return S.ribY;
+  const clamped = px > first.px ? first : px < last.px ? last : undefined;
+  return clamped === undefined ? S.ribY : clamped.y + ROW / 2;
 }
 
 /**

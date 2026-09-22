@@ -2,8 +2,8 @@ import * as Tick from "../domain/tick";
 import type { FrameSample } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
 import type { DrawContext } from "./draw.types";
-import { heatColour, isRound, pulseState } from "./ladder";
-import { FONT, PALETTE, formatSize, rgba, sideColour, text } from "./palette";
+import { heatColour, isRound, pulseState, tagY } from "./ladder";
+import { PALETTE, formatSize, pill, rgba, sideColour, text } from "./palette";
 import { TAPE_W } from "./tape";
 
 /**
@@ -149,21 +149,14 @@ function drawSpineBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, cx: nu
   ctx.fillRect(0, y - 0.5, W, 1);
   const last = S.lastTrade;
   const lastPx = last?.px ?? S.mid;
-  const row = S.rows.find((r) => Math.abs(r.px - lastPx) < d.gridTick / 2 + 1e-9);
-  const ty = row === undefined ? y : row.y + ROW / 2;
+  const ty = tagY(S, lastPx, d.gridTick);
   const colour =
     last === undefined ? PALETTE.mid : last.dir > 0 ? PALETTE.bid : last.dir < 0 ? PALETTE.ask : PALETTE.neutral;
   const lbl =
     last === undefined
       ? Tick.formatMid(S.mid, d.scale)
       : `${last.dir > 0 ? "▲ " : last.dir < 0 ? "▼ " : ""}${Tick.format(last.px, d.scale)}`;
-  ctx.font = `600 12px ${FONT}`;
-  const tw = ctx.measureText(lbl).width + 10;
-  ctx.fillStyle = rgba(colour, 0.95);
-  ctx.beginPath();
-  ctx.roundRect(cx + 30 - tw / 2, ty - 9, tw, 18, 3);
-  ctx.fill();
-  text(ctx, lbl, cx + 30, ty, PALETTE.bg, "center", 12, true);
+  pill(ctx, lbl, cx + 30, ty, "center", rgba(colour, 0.95));
   const bx = cx - 300;
   const bw = 10;
   const H = 44;
