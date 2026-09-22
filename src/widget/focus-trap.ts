@@ -31,13 +31,19 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>): void {
       const last = items.at(-1);
       if (first === undefined || last === undefined) return;
       const active = document.activeElement;
-      const leavingBackwards = e.shiftKey && (active === first || !container.contains(active));
-      const leavingForwards = !e.shiftKey && active === last;
+      // A list row can be replaced under the cursor while the popover is open
+      // (the market list refreshes), which drops focus to the body. Tab from
+      // outside the popover therefore returns into it rather than walking the
+      // chrome behind a modal.
+      const outside = active === null || !container.contains(active);
+      const leavingBackwards = e.shiftKey && (outside || active === first);
+      const leavingForwards = !e.shiftKey && (outside || active === last);
       if (!leavingBackwards && !leavingForwards) return;
       e.preventDefault();
       (e.shiftKey ? last : first).focus();
     };
-    container.addEventListener("keydown", onKey);
-    return () => container.removeEventListener("keydown", onKey);
+    // Document-level: the container only sees keys while it holds focus.
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
   }, [ref]);
 }
