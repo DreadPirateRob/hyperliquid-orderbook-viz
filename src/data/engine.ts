@@ -1,7 +1,21 @@
+import type { PriceScale } from "../domain/tick";
 import type { Tick } from "../domain/tick";
-import { casesHandled, notYetImplemented } from "../shared/result";
-import type { BookSnapshot, ConnectionState, Engine, EngineConfig, LevelEvent } from "./engine-api.types";
+import { casesHandled } from "../shared/result";
+import { createAttribution } from "./attribution";
+import type { Attribution } from "./attribution";
+import type {
+  BookSnapshot,
+  ConnectionState,
+  Engine,
+  EngineConfig,
+  LevelEvent,
+  Metrics,
+  SideMetrics,
+} from "./engine-api.types";
 import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events.types";
+import { createLevelStats } from "./level-stats";
+import type { LevelStats } from "./level-stats";
+import { convexity, cumulativeCurve, executionCost } from "./metrics";
 
 /**
  * Snapshot-native engine (ADR 0001, 0007). Each side is a pair of typed
@@ -32,7 +46,7 @@ function makeSide(capacity: number): SideStore {
  * @returns A fresh engine in `CONNECTING`.
  */
 export function createEngine(config: EngineConfig): Engine {
-  return new BookEngine(config.gridTick);
+  return new BookEngine(config);
 }
 
 class BookEngine implements Engine {
@@ -48,8 +62,18 @@ class BookEngine implements Engine {
   private lastFastRx = 0;
   private lastSlowRx = 0;
   private cached: BookSnapshot | undefined;
+  private cachedMetrics: Metrics | undefined;
+  private cachedNotional = Number.NaN;
+  private readonly attribution: Attribution = createAttribution();
+  private readonly stats: LevelStats = createLevelStats();
+  private now = 0;
+  private gridTick: number;
+  private scale: PriceScale | undefined;
 
-  constructor(private gridTick: number) {}
+  constructor(config: EngineConfig) {
+    this.gridTick = config.gridTick;
+    this.scale = config.scale;
+  }
 
   readonly apply = (event: FeedEvent): void => {
     switch (event._tag) {
@@ -71,8 +95,12 @@ class BookEngine implements Engine {
         for (const t of event.trades) {
           this.lastTrade = t;
           this.trades.push(t);
+          this.attribution.addTrade(t, event.rx);
         }
-        if (event.trades.length > 0) this.bump();
+        if (event.trades.length > 0) {
+          this.settleAttribution(event.rx);
+          this.bump();
+        }
         return;
       case "ack":
       case "market":
@@ -96,6 +124,10 @@ class BookEngine implements Engine {
         this.bump();
         return;
       case "tick": {
+        this.now = event.rx;
+        this.attribution.prune(event.rx);
+        this.settleAttribution(event.rx);
+        this.stats.tick(event.rx);
         const stale =
           (this.lastFastRx > 0 && event.rx - this.lastFastRx > STALE_FAST_MS) ||
           (this.lastSlowRx > 0 && event.rx - this.lastSlowRx > STALE_SLOW_MS);
@@ -136,7 +168,57 @@ class BookEngine implements Engine {
     return out;
   };
 
-  readonly metrics = (): never => notYetImplemented("engine metrics land with the overlays ticket");
+  readonly metrics = (notional: number): Metrics => {
+    const cached = this.cachedMetrics;
+    if (cached !== undefined && this.cachedNotional === notional) return cached;
+    const snapshot = this.snapshot();
+    const bb = this.bestBid ?? snapshot.bids[0];
+    const aa = this.bestAsk ?? snapshot.asks[0];
+    const share = bb !== undefined && aa !== undefined && bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5;
+    const unit = this.scale === undefined ? 1 : 10 ** -this.scale.decimals;
+    const mid = bb !== undefined && aa !== undefined ? ((bb.px + aa.px) / 2) * unit : Number.NaN;
+    const fiveBid = sumTop(snapshot.bids, 5);
+    const fiveAsk = sumTop(snapshot.asks, 5);
+    const metrics: Metrics = {
+      version: this.version,
+      share,
+      imbalance5: fiveBid + fiveAsk > 0 ? (fiveBid - fiveAsk) / (fiveBid + fiveAsk) : 0,
+      micro: bb !== undefined && aa !== undefined ? (bb.px + share * (aa.px - bb.px)) * unit : Number.NaN,
+      pressure: this.stats.fieldSum("bid", this.now) - this.stats.fieldSum("ask", this.now),
+      bid: this.sideMetrics("bid", snapshot.bids),
+      ask: this.sideMetrics("ask", snapshot.asks),
+      costBuy: this.cost(snapshot.asks, notional, mid),
+      costSell: this.cost(snapshot.bids, notional, mid),
+    };
+    this.cachedMetrics = metrics;
+    this.cachedNotional = notional;
+    return metrics;
+  };
+
+  /** Field value for one price, for the size-delta strip. */
+  readonly field = (side: Side, px: Tick): number => this.stats.fieldAt(side, px, this.now);
+
+  /** Live resiliency watch for one price, for the refill bar. */
+  readonly watch = (side: Side, px: Tick) => this.stats.watch(side, px);
+
+  private sideMetrics(side: Side, levels: ReadonlyArray<Level>): SideMetrics {
+    const w = this.stats.window(side, this.now);
+    return { ...w, convexity: convexity(levels), shape: cumulativeCurve(levels) };
+  }
+
+  private cost(levels: ReadonlyArray<Level>, notional: number, mid: number) {
+    if (this.scale === undefined) {
+      return { vwap: Number.NaN, slippageBps: Number.NaN, filledFraction: 0, levels: 0, exceedsVisibleDepth: true };
+    }
+    return executionCost(levels, notional, mid, this.scale);
+  }
+
+  /** Move late-attributed volume from cancelled to consumed (ADR 0005). */
+  private settleAttribution(t: number): void {
+    for (const moved of this.attribution.reattribute(t)) {
+      this.stats.reattribute(moved.side, moved.px, moved.consumed, moved.cancelled);
+    }
+  }
 
   readonly reset = (config: EngineConfig): void => {
     this.gridTick = config.gridTick;
@@ -149,6 +231,9 @@ class BookEngine implements Engine {
     this.lastSlowRx = 0;
     this.events = [];
     this.trades = [];
+    this.stats.clear();
+    this.attribution.clear();
+    this.scale = config.scale;
     this.connection = "RESYNCING";
     this.bump();
   };
@@ -156,6 +241,51 @@ class BookEngine implements Engine {
   private bump(): void {
     this.version++;
     this.cached = undefined;
+    this.cachedMetrics = undefined;
+  }
+
+  /**
+   * Emit one level event and fold it into the metric state: a decrease is
+   * split into consumed/cancelled by the prints in this stream's push window
+   * and stays open for late re-attribution. BBO flicker is excluded from the
+   * per-side aggregates (ADR 0007) but still moves the size-delta field.
+   */
+  private record(
+    side: Side,
+    px: Tick,
+    kind: LevelEvent["kind"],
+    from: number,
+    to: number,
+    stream: BookStream,
+    rx: number,
+  ): void {
+    const windowStart =
+      stream === "slow"
+        ? this.lastSlowRx
+        : stream === "fast"
+          ? this.lastFastRx
+          : Math.max(this.lastSlowRx, this.lastFastRx);
+    const decrease = from - to;
+    const split =
+      decrease > 0 && kind !== "outOfWindow"
+        ? this.attribution.split(side, px, decrease, windowStart, rx)
+        : { consumed: 0, cancelled: 0 };
+    if (kind !== "outOfWindow") {
+      this.stats.change(side, px, from, to, rx, stream !== "bbo", split);
+      if (decrease > 0) this.attribution.openPending(side, px, decrease, split, windowStart, rx);
+    }
+    this.events.push({
+      side,
+      px,
+      kind,
+      from,
+      to,
+      consumed: split.consumed,
+      cancelled: split.cancelled,
+      stream,
+      time: rx,
+    });
+    this.now = rx;
   }
 
   /** BBO owns the touch (v4 `applyBbo`): its price enters the book only when on grid. */
@@ -188,21 +318,23 @@ class BookEngine implements Engine {
       const nx = incoming[j];
       if (opx !== undefined && (nx === undefined || better(side, opx, nx.px))) {
         const osz = s.sz[i] ?? 0;
-        if (stream === "slow") this.events.push(levelEvent(side, opx, "vanished", osz, 0, stream, rx));
+        // SAFETY: store prices are copies of parsed ticks.
+        const tickPx = opx as Tick;
+        if (stream === "slow") this.record(side, tickPx, "vanished", osz, 0, stream, rx);
         else if (best !== undefined && better(side, opx, best.px))
-          this.events.push(levelEvent(side, opx, "outOfWindow", osz, 0, stream, rx));
+          this.record(side, tickPx, "outOfWindow", osz, 0, stream, rx);
         else if (worst !== undefined && !better(side, worst.px, opx))
-          this.events.push(levelEvent(side, opx, "vanished", osz, 0, stream, rx));
+          this.record(side, tickPx, "vanished", osz, 0, stream, rx);
         else push(out, opx, osz, s.n[i] ?? 0);
         i++;
       } else if (nx !== undefined && (opx === undefined || better(side, nx.px, opx))) {
-        this.events.push(levelEvent(side, nx.px, "added", 0, nx.sz, stream, rx));
+        this.record(side, nx.px, "added", 0, nx.sz, stream, rx);
         push(out, nx.px, nx.sz, nx.n);
         j++;
       } else if (nx !== undefined) {
         const osz = s.sz[i] ?? 0;
-        if (nx.sz < osz) this.events.push(levelEvent(side, nx.px, "shrank", osz, nx.sz, stream, rx));
-        else if (nx.sz > osz) this.events.push(levelEvent(side, nx.px, "grew", osz, nx.sz, stream, rx));
+        if (nx.sz < osz) this.record(side, nx.px, "shrank", osz, nx.sz, stream, rx);
+        else if (nx.sz > osz) this.record(side, nx.px, "grew", osz, nx.sz, stream, rx);
         push(out, nx.px, nx.sz, nx.n);
         i++;
         j++;
@@ -211,6 +343,13 @@ class BookEngine implements Engine {
     this.scratch = s;
     this.sides[side] = out;
   }
+}
+
+/** Sum of the first `n` levels' sizes, for the N-level imbalance. */
+function sumTop(levels: ReadonlyArray<Level>, n: number): number {
+  let sum = 0;
+  for (let i = 0; i < Math.min(n, levels.length); i++) sum += levels[i]?.sz ?? 0;
+  return sum;
 }
 
 function better(side: Side, a: number, b: number): boolean {
@@ -241,17 +380,4 @@ function sideLevels(s: SideStore): ReadonlyArray<Level> {
     out.push({ px: (s.px[i] ?? 0) as Tick, sz: s.sz[i] ?? 0, n: s.n[i] ?? 0 });
   }
   return out;
-}
-
-function levelEvent(
-  side: Side,
-  px: number,
-  kind: LevelEvent["kind"],
-  from: number,
-  to: number,
-  stream: BookStream,
-  time: number,
-): LevelEvent {
-  // SAFETY: as above; `px` originates from a Tick and is only ever copied.
-  return { side, px: px as Tick, kind, from, to, consumed: 0, cancelled: 0, stream, time };
 }

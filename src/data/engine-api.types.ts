@@ -1,4 +1,4 @@
-import type { Tick } from "../domain/tick";
+import type { PriceScale, Tick } from "../domain/tick";
 import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events.types";
 
 /**
@@ -55,7 +55,7 @@ export type SideMetrics = {
   readonly cancelRatioVolume: number;
   readonly medianRefillMs: number | undefined;
   readonly refillAt5s: number | undefined;
-  readonly convexity: number;
+  readonly convexity: number | undefined;
   /** Cumulative curve, best outward, for the shape sparkline. */
   readonly shape: ReadonlyArray<number>;
 };
@@ -77,6 +77,8 @@ export type Metrics = {
 /** Engine configuration; `gridTick` gates which BBO prices may enter the book (v4 `onGrid`). */
 export type EngineConfig = {
   readonly gridTick: number;
+  /** Price scale, needed to price execution cost in quote units. */
+  readonly scale?: PriceScale | undefined;
 };
 
 /** The engine's pull API. */
