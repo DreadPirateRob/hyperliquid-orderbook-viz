@@ -141,3 +141,20 @@ export function format(tick: Tick, scale: PriceScale): string {
   const split = digits.length - scale.decimals;
   return `${digits.slice(0, split)}.${digits.slice(split)}`;
 }
+
+/**
+ * Render a tick for a ladder row: the decimals implied by the grid step
+ * (v4's `dec = −⌊log10 gridTick$⌋`), never more than the scale's.
+ *
+ * @param tick - The row price.
+ * @param scale - The market's price scale.
+ * @param gridTick - Row step in raw ticks (a power of ten times 1, 2 or 5).
+ * @returns The decimal string.
+ */
+export function formatOnGrid(tick: Tick, scale: PriceScale, gridTick: number): string {
+  const drop = Math.min(scale.decimals, Math.max(0, Math.floor(Math.log10(gridTick) + 1e-9)));
+  const full = format(tick, scale);
+  const cut = full.length - drop;
+  const trimmed = full.slice(0, cut);
+  return trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
+}

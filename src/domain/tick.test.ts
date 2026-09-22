@@ -82,3 +82,12 @@ describe("Tick.makeScale", () => {
     }
   });
 });
+
+describe("Tick.formatOnGrid", () => {
+  it("shows only the decimals the grid step needs (v4 dec)", () => {
+    expect(Tick.formatOnGrid(parsed("81070.0", btc), btc, 10)).toBe("81070");
+    expect(Tick.formatOnGrid(parsed("81070.5", btc), btc, 1)).toBe("81070.5");
+    expect(Tick.formatOnGrid(parsed("0.002500", spot), spot, 100)).toBe("0.0025");
+    expect(Tick.formatOnGrid(parsed("81000.0", btc), btc, 1000)).toBe("81000");
+  });
+});
