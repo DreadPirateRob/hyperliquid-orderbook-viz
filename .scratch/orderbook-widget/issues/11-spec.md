@@ -6,4 +6,4 @@ Blocked by: 10
 
 ## Question
 
-Write `.scratch/orderbook-widget/spec.md`: the complete build spec assembled from Decisions so far and the ADRs. Covers widget props API, engine API, metrics formulas, visual values from the prototype, renderer interface, HUD fields, connection states, controls, proof surface, deploy. Nothing in it should be a new decision.
+Use the `to-spec` skill: synthesise the resolved tickets, ADRs, glossary and v4 into one build spec. The visual sections must reference v4 functions by name (`sample`, `heatColour`, `pulseState`, `persistence`, `trailStrip`, `drawLadder`, `drawSpine`, `drawTape`, `ribbon1`, `shareBar`, `drawShapePanel`, `loop`) and state which constants are copied verbatim. Written from scratch; the spec on `attempt/react-v1` is not consulted.
