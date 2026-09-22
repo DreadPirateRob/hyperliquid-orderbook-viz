@@ -50,6 +50,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - File naming: type-only modules are `<name>.types.ts`, tests `<name>.test.ts`, generators `<name>.arbitrary.ts`; a bare `<name>.ts`/`.tsx` always carries runtime code.- [Ladder rows on screen](issues/19-ladder-rows.md): tracer bullet socket/fixture → engine → sampler → static ladder → React canvas; parity gate passed; ADR 0007 amended (window from the touch).
 
 - Tooling: Prettier formats (`npm run format`), oxlint lints, `npm run check` = typecheck + lint + tests. Format before each commit.- [Level motion](issues/20-motion.md): hist in the state layer, springs/pulses/persistence per v4, settle on tab return, reduced motion; parity gate passed.
+- [Trails and boundary overlay](issues/21-trails-boundary.md): 12 s gliding trails, touch paths with tags, boundary line, last-trade tag, share bar, trails toggle + URL; parity gate passed.
 
 ## Not yet specified
 
