@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 21, 22
 
 - [ ] Engine metrics tests: hand-built book cost, VWAP-bounded property, cancel ratio on the active BTC recording, convexity front-loaded vs flat, lazy on version
