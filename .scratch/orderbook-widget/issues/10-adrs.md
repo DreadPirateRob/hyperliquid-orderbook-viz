@@ -1,7 +1,7 @@
 # Adrs
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 03, 04, 05, 06, 07, 08, 16, 17
 
 ## Question
