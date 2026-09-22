@@ -75,16 +75,31 @@ export function ladderLayout(width: number, trailsOn: boolean, tapeOn: boolean):
 }
 
 /** v4 pulse decay constants (ms). */
-const PULSE_TAU: Record<Pulse["kind"], number> = { fill: 500, ghost: 700, add: 450, grew: 400 };
+const PULSE_TAU: Record<Pulse["kind"], number> = { fill: 500, consumed: 500, ghost: 700, add: 450, grew: 400 };
 
-/** Per-kind intensity of a row's pulses at frame time `t` (v4 `pulseState`); the strongest of each kind wins. */
-export function pulseState(pulses: ReadonlyArray<Pulse>, t: number): Record<Pulse["kind"], number> {
+/** Intensity per drawn effect at frame time `t` (v4 `pulseState`): fill and consumed share the fill effect; the strongest wins. */
+export function pulseState(pulses: ReadonlyArray<Pulse>, t: number): Record<"fill" | "ghost" | "add" | "grew", number> {
   const o = { fill: 0, ghost: 0, add: 0, grew: 0 };
   for (const p of pulses) {
     const v = Math.exp(-(t - p.t0) / PULSE_TAU[p.kind]);
-    if (v > o[p.kind]) o[p.kind] = v;
+    const slot = p.kind === "consumed" ? "fill" : p.kind;
+    if (v > o[slot]) o[slot] = v;
   }
   return o;
+}
+
+/**
+ * x of a trail sample inside the trail column: tiles are positioned by time, so the strip glides by the
+ * fraction of `TRAIL_DT` elapsed since the last sample rather than jumping per sample.
+ *
+ * @param sampleT - Frame time of the sample.
+ * @param now - Current frame time.
+ * @param x0 - Column left edge.
+ * @param w - Column width.
+ * @returns x in CSS px (may be left of `x0` once the sample ages out).
+ */
+export function trailX(sampleT: number, now: number, x0: number, w: number): number {
+  return x0 + ((sampleT - (now - TRAIL_MS)) / TRAIL_MS) * w;
 }
 
 /** v4 `persistence`: saturation ramps over 20 s from first sight. */
@@ -208,7 +223,7 @@ function trailStrip(
   const x1 = x0 + w;
   const sat = 0.35 + 0.65 * persistence(row, S.t);
   for (const s of row.trail) {
-    const x = x0 + ((s.t - (S.t - TRAIL_MS)) / TRAIL_MS) * w;
+    const x = trailX(s.t, S.t, x0, w);
     if (x < x0) continue;
     const rel = s.sz / S.maxSz;
     if (rel <= 0) continue;
@@ -221,7 +236,7 @@ function trailStrip(
   }
   for (const p of row.pulses) {
     if (p.kind !== "fill") continue;
-    const x = x0 + ((p.t0 - (S.t - TRAIL_MS)) / TRAIL_MS) * w;
+    const x = trailX(p.t0, S.t, x0, w);
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(x, y + ROW / 2, 2.5, 0, Math.PI * 2);
@@ -229,8 +244,15 @@ function trailStrip(
   }
 }
 
-/** y of a price by interpolating between the rows around it (v4 `yOf`). */
-function yOf(rows: ReadonlyArray<FrameRow>, px: number): number {
+/**
+ * y of a price by interpolating between the rows around it (v4 `yOf`), so a
+ * BBO finer than the grid sits between rows.
+ *
+ * @param rows - The frame's rows, top to bottom.
+ * @param px - Price in raw ticks.
+ * @returns Vertical centre in CSS px, or −100 with no rows.
+ */
+export function yOf(rows: ReadonlyArray<FrameRow>, px: number): number {
   let above: FrameRow | undefined;
   let below: FrameRow | undefined;
   for (const r of rows) {
@@ -266,7 +288,7 @@ function drawTouchPaths(
   for (const side of sides) {
     ctx.beginPath();
     S.midTrail.forEach((s, i) => {
-      const x = X.trail + ((s.t - (S.t - TRAIL_MS)) / TRAIL_MS) * X.trailW;
+      const x = trailX(s.t, S.t, X.trail, X.trailW);
       const yy = yOf(S.rows, s[side.key]);
       if (i === 0) ctx.moveTo(x, yy);
       else ctx.lineTo(x, yy);

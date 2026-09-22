@@ -151,7 +151,7 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
           case "vanished":
             e.prev = e.live;
             setSize(e, ev.to, t);
-            pulse(e, ev.consumed > 0 ? "fill" : "ghost", t);
+            pulse(e, ev.consumed > 0 ? "consumed" : "ghost", t);
             break;
           case "outOfWindow":
             e.prev = e.live;

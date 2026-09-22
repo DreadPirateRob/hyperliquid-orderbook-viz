@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { pulseState } from "./ladder";
+import * as Tick from "../domain/tick";
+import { pulseState, trailX, yOf } from "./ladder";
+
+function tick(n: number): Tick.Tick {
+  const r = Tick.fromInteger(n);
+  if (r._tag === "err") throw r.error;
+  return r.value;
+}
 
 describe("pulseState", () => {
   it("decays each kind with v4's time constants and keeps the strongest per kind", () => {
@@ -20,7 +27,48 @@ describe("pulseState", () => {
     expect(ps.grew).toBeCloseTo(Math.exp(-100 / 400), 6);
   });
 
+  it("draws consumed decreases with the fill effect", () => {
+    expect(pulseState([{ kind: "consumed", t0: 0 }], 0).fill).toBe(1);
+  });
+
   it("is zero with no pulses", () => {
     expect(pulseState([], 0)).toEqual({ fill: 0, ghost: 0, add: 0, grew: 0 });
+  });
+});
+
+describe("trailX", () => {
+  it("places the newest sample at the right edge and glides it left by the elapsed fraction", () => {
+    const now = 100_000;
+    expect(trailX(now, now, 8, 480)).toBe(488);
+    expect(trailX(now - 12_000, now, 8, 480)).toBe(8);
+    // 100 ms after a sample: 100/12000 of the column, i.e. 4 px, without waiting for the next sample
+    expect(trailX(now - 100, now, 8, 480)).toBeCloseTo(488 - 4, 6);
+    expect(trailX(now - 13_000, now, 8, 480)).toBeLessThan(8);
+  });
+});
+
+describe("yOf", () => {
+  const rows = [1020, 1010, 1000].map((px, i) => ({
+    i,
+    y: i * 22,
+    px: tick(px),
+    side: "bid" as const,
+    shown: 0,
+    live: 0,
+    prev: 0,
+    cum: 0,
+    inRuler: true,
+    field: 0,
+    pulses: [],
+    first: 0,
+    trail: [],
+  }));
+  it("centres a grid price on its row and interpolates a finer BBO between rows", () => {
+    expect(yOf(rows, 1010)).toBe(33);
+    expect(yOf(rows, 1005)).toBe(44);
+    expect(yOf(rows, 1017.5)).toBe(11 + (2.5 / 10) * 22);
+    expect(yOf(rows, 1030)).toBe(11);
+    expect(yOf(rows, 990)).toBe(55);
+    expect(yOf([], 5)).toBe(-100);
   });
 });

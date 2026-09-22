@@ -11,10 +11,6 @@ import "./widget/theme.css";
  * Demo composition root. `?fixture=<name>` swaps the live socket for a
  * recording under `/fixtures/`; `?speed=` sets the replay multiplier.
  */
-/**
- * Demo composition root. `?fixture=<name>` swaps the live socket for a
- * recording under `/fixtures/`; `?speed=` sets the replay multiplier.
- */
 /** Widget params live in the URL (ADR 0008): `replaceState` only, foreign params preserved. */
 function syncUrl(state: WidgetState): void {
   const url = new URL(location.href);

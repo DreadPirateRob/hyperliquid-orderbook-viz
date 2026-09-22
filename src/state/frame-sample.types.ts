@@ -9,7 +9,8 @@ import type { Tick } from "../domain/tick";
 
 /** A pulse fired on a level; drawn by age against v4's decay constants (the ghost's width comes from the row's prev − live, as in v4). */
 export type Pulse = {
-  readonly kind: "fill" | "ghost" | "add" | "grew";
+  /** `fill` = a live print at this price; `consumed` = a book decrease attributed to trades (no trail dot). */
+  readonly kind: "fill" | "consumed" | "ghost" | "add" | "grew";
   readonly t0: number;
 };
 
