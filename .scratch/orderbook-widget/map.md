@@ -49,7 +49,8 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 
 - File naming: type-only modules are `<name>.types.ts`, tests `<name>.test.ts`, generators `<name>.arbitrary.ts`; a bare `<name>.ts`/`.tsx` always carries runtime code.- [Ladder rows on screen](issues/19-ladder-rows.md): tracer bullet socket/fixture → engine → sampler → static ladder → React canvas; parity gate passed; ADR 0007 amended (window from the touch).
 
-- Tooling: Prettier formats (`npm run format`), oxlint lints, `npm run check` = typecheck + lint + tests. Format before each commit.
+- Tooling: Prettier formats (`npm run format`), oxlint lints, `npm run check` = typecheck + lint + tests. Format before each commit.- [Level motion](issues/20-motion.md): hist in the state layer, springs/pulses/persistence per v4, settle on tab return, reduced motion; parity gate passed.
+
 ## Not yet specified
 
 - **Flow histograms** (1h/4h/1d buy vs sell): needs minutes of accumulated trades and a time axis; revisit once the trades pipeline exists.
