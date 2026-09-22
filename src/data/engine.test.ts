@@ -71,6 +71,13 @@ describe("engine replay over every recording", () => {
         // regridding: they sit at raw precision. Only venue recordings prove the grid.
         if (!fx.meta.synthetic) expect(l.px % gridTick, `on grid ${l.px}`).toBe(0);
       }
+      for (const side of [s.bids, s.asks]) {
+        let cum = 0;
+        for (const l of side) {
+          expect(l.sz + cum, "cumulative depth is monotone from the touch outward").toBeGreaterThan(cum);
+          cum += l.sz;
+        }
+      }
       const bb = s.bids[0];
       const ba = s.asks[0];
       // The synthetic recording's rescaling also drifts the slow pushes against
