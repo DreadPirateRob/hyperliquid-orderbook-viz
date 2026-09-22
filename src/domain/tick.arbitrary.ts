@@ -9,16 +9,21 @@ import * as Tick from "./tick";
 export function priceScale(): fc.Arbitrary<Tick.PriceScale> {
   return fc
     .tuple(fc.constantFrom("perp", "spot"), fc.integer({ min: 0, max: 6 }))
-    .map(([kind, szDecimals]) => Tick.makeScale(kind, szDecimals));
+    .map(([kind, szDecimals]) => {
+      const r = Tick.makeScale(kind, szDecimals);
+      if (r._tag === "err") throw r.error;
+      return r.value;
+    });
 }
 
 /**
- * A positive tick. Ticks are scale-independent integers.
+ * A tick. Ticks are scale-independent non-negative integers; zero is legal
+ * and exercises the formatter's padding branch.
  *
- * @returns An arbitrary over positive safe-integer ticks.
+ * @returns An arbitrary over safe-integer ticks.
  */
 export function tick(): fc.Arbitrary<Tick.Tick> {
-  return fc.integer({ min: 1, max: Number.MAX_SAFE_INTEGER }).map((n) => {
+  return fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }).map((n) => {
     const r = Tick.fromInteger(n);
     if (r._tag === "err") throw r.error;
     return r.value;

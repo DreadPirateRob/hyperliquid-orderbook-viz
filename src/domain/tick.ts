@@ -50,15 +50,32 @@ export class InvalidTick extends Error {
   }
 }
 
+/** `szDecimals` is not an integer in `[0, D]` for the market kind. */
+export class InvalidScale extends Error {
+  readonly _tag = "InvalidScale" as const;
+
+  constructor(
+    readonly kind: MarketKind,
+    readonly szDecimals: number,
+  ) {
+    super(`szDecimals ${szDecimals} is outside [0, ${priceDecimals(kind)}] for ${kind}`);
+  }
+}
+
 /**
  * Build the price scale of a market from its size decimals.
  *
  * @param kind - Perp or spot.
  * @param szDecimals - The market's `szDecimals` from `meta`/`spotMeta`.
- * @returns The scale used by `parse` and `format`.
+ * @returns The scale used by `parse` and `format`, or `InvalidScale` when
+ *   `szDecimals` would give negative price decimals.
  */
-export function makeScale(kind: MarketKind, szDecimals: number): PriceScale {
-  return { kind, szDecimals, decimals: priceDecimals(kind) - szDecimals };
+export function makeScale(kind: MarketKind, szDecimals: number): Result<PriceScale, InvalidScale> {
+  const d = priceDecimals(kind);
+  if (!Number.isInteger(szDecimals) || szDecimals < 0 || szDecimals > d) {
+    return err(new InvalidScale(kind, szDecimals));
+  }
+  return ok({ kind, szDecimals, decimals: d - szDecimals });
 }
 
 function priceDecimals(kind: MarketKind): number {
