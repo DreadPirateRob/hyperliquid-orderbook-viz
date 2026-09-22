@@ -3,7 +3,7 @@ import type { FrameSample } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
 import type { DrawContext } from "./draw.types";
 import { heatColour, isRound, pulseState, tagY } from "./ladder";
-import { PALETTE, formatSize, pill, rgba, sideColour, text } from "./palette";
+import { FONT, PALETTE, formatSize, pill, rgba, sideColour, text } from "./palette";
 import { TAPE_W } from "./tape";
 
 /**
@@ -90,15 +90,13 @@ export function drawSpine(d: DrawContext, S: FrameSample): void {
       ctx.fillStyle = rgba(PALETTE.hot, 0.3 * ps.fill);
       ctx.fillRect(dir < 0 ? 0 : cx, y, cx, ROW);
     }
-    text(
-      ctx,
-      formatSize(row.shown),
-      dir < 0 ? x0 - w - 6 : x0 + w + 6,
-      cy,
-      PALETTE.text,
-      dir < 0 ? "right" : "left",
-      11,
-    );
+    // At phone widths a bar can reach the edge; the size stays legible inside it.
+    const sizeLabel = formatSize(row.shown);
+    ctx.font = `11px ${FONT}`;
+    const tw = ctx.measureText(sizeLabel).width;
+    const rawX = dir < 0 ? x0 - w - 6 : x0 + w + 6;
+    const labelX = dir < 0 ? Math.max(tw + 4, rawX) : Math.min(W - tw - 4, rawX);
+    text(ctx, sizeLabel, labelX, cy, PALETTE.text, dir < 0 ? "right" : "left", 11);
     ctx.globalAlpha = 1;
   }
   for (const yy of S.rulerY) {

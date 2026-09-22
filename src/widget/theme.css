@@ -329,6 +329,8 @@ body,
   max-height: 70vh;
   border-radius: 10px 10px 0 0;
   border-bottom: 0;
+  /* Full width over the ladder: a translucent panel would read as two overlaid books. */
+  background: #0f1319;
 }
 
 .orderbook[data-sheet="1"] .orderbook-bar {
