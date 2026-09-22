@@ -15,6 +15,30 @@ import { TAPE_W } from "./tape";
 const GAP = 60;
 const MAX_HALF = 420;
 
+/** Spine geometry for a width. */
+export type SpineLayout = {
+  /** Width the spine occupies (the tape column is not reserved). */
+  readonly width: number;
+  /** Centre column x. */
+  readonly cx: number;
+  /** Where bars start, either side of the centre. */
+  readonly gap: number;
+  /** Longest bar, in CSS px. */
+  readonly barMax: number;
+};
+
+/**
+ * v4's spine geometry: centred column, bars from ±60 out to at most 420 px.
+ *
+ * @param width - Canvas width in CSS px.
+ * @returns Centre and bar extents.
+ */
+export function spineLayout(width: number): SpineLayout {
+  const cx = Math.round(width / 2);
+  const half = Math.min(MAX_HALF, cx - GAP);
+  return { width, cx, gap: GAP, barMax: half - GAP };
+}
+
 /**
  * Paint the centre-spine view.
  *
@@ -23,11 +47,8 @@ const MAX_HALF = 420;
  */
 export function drawSpine(d: DrawContext, S: FrameSample): void {
   const { ctx } = d;
-  const W = d.tapeOn ? d.width - TAPE_W : d.width;
-  const cx = Math.round(W / 2);
-  const half = Math.min(MAX_HALF, cx - GAP);
-  const barMax = half - GAP;
-  drawProfiles(ctx, S, cx, GAP, barMax, d.height);
+  const { width: W, cx, gap, barMax } = spineLayout(d.tapeOn ? d.width - TAPE_W : d.width);
+  drawProfiles(ctx, S, cx, gap, barMax, d.height);
   for (const row of S.rows) {
     const y = row.y;
     const cy = y + ROW / 2;
@@ -50,7 +71,7 @@ export function drawSpine(d: DrawContext, S: FrameSample): void {
     const ps = pulseState(row.pulses, S.t);
     const h = heatColour(row, row.side, S.maxSz, S.t);
     const w = (row.shown / S.maxSz) * barMax;
-    const x0 = cx + dir * GAP;
+    const x0 = cx + dir * gap;
     ctx.fillStyle = rgba(h.c, h.a);
     ctx.fillRect(dir < 0 ? x0 - w : x0, y + 3, w, ROW - 6);
     if (ps.ghost > 0) {

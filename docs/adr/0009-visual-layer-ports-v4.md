@@ -24,3 +24,7 @@ Process rules, from the retrospective:
 - The port can be verified mechanically (constants diffed against v4) and visually (parity gate).
 - v4 stays checked in on `prototype/ladder` and `prototype/` stays git-ignored on master; the port cites v4 function names in comments so drift is traceable.
 - Spec sections about visuals point at v4 functions instead of re-describing them.
+
+## Amendment (Centre spine view)
+
+v4 keeps the tape column visible in the spine view. The user's standing preference is that the spine carries no trails and no tape, so the port hides both there **and** reclaims their columns: the spine centres in the full canvas width. Everything else in `drawSpine` (gap 60, half capped at 420, profile alpha 0.07/stroke 0.45, heat, pulses, size labels outboard, ruler lines, boundary with the last-trade tag at `cx + 30` and the share bar at `cx − 300`) is v4's.
