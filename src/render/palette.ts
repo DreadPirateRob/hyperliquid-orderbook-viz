@@ -8,6 +8,8 @@ export const PALETTE = {
   hot: [251, 191, 36],
   mid: [96, 165, 250],
   white: [255, 255, 255],
+  /** Last-trade tag when the print did not move (v4 literal). */
+  neutral: [200, 200, 200],
 } as const;
 
 /** An RGB triple. */

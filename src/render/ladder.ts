@@ -1,6 +1,7 @@
 import * as Tick from "../domain/tick";
 import type { FrameRow, FrameSample, Pulse } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
+import { TRAIL_DT, TRAIL_MS } from "../state/trail";
 import type { PriceScale } from "../domain/tick";
 import type { DrawContext } from "./draw.types";
 import type { Rgb } from "./palette";
@@ -17,8 +18,6 @@ const BLOCK_W = 300;
 const GUTTER_W = 170;
 const TAPE_W = 200;
 const PERSISTENCE_MS = 20000;
-const TRAIL_MS = 12000;
-const TRAIL_DT = 250;
 const RULER_DIM = 0.45;
 
 /** Column x positions (v4's `X`). */
@@ -225,7 +224,7 @@ function trailStrip(
     const x = x0 + ((p.t0 - (S.t - TRAIL_MS)) / TRAIL_MS) * w;
     ctx.fillStyle = "#fff";
     ctx.beginPath();
-    ctx.arc(x, y + ROW / 2, 2.5, 0, 7);
+    ctx.arc(x, y + ROW / 2, 2.5, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -287,7 +286,8 @@ function drawTouchPaths(
     ctx.font = `600 9px ${FONT}`;
     const tw = ctx.measureText(lbl).width + 6;
     ctx.fillStyle = rgba(side.c, 0.95);
-    roundRect(ctx, X.trail + X.trailW - tw - 2, yy + side.dy - 6, tw, 12, 2);
+    ctx.beginPath();
+    ctx.roundRect(X.trail + X.trailW - tw - 2, yy + side.dy - 6, tw, 12, 2);
     ctx.fill();
     text(ctx, lbl, X.trail + X.trailW - 5, yy + side.dy, PALETTE.bg, "right", 9, true);
   }
@@ -303,7 +303,7 @@ function drawBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLa
   const row = S.rows.find((r) => Math.abs(r.px - lastPx) < d.gridTick / 2 + 1e-9);
   const ty = row === undefined ? y : row.y + ROW / 2;
   const lc: Rgb =
-    last === undefined ? PALETTE.mid : last.dir > 0 ? PALETTE.bid : last.dir < 0 ? PALETTE.ask : [200, 200, 200];
+    last === undefined ? PALETTE.mid : last.dir > 0 ? PALETTE.bid : last.dir < 0 ? PALETTE.ask : PALETTE.neutral;
   const lbl =
     last === undefined
       ? Tick.formatMid(S.mid, d.scale)
@@ -311,7 +311,8 @@ function drawBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLa
   ctx.font = `600 12px ${FONT}`;
   const tw = ctx.measureText(lbl).width + 10;
   ctx.fillStyle = rgba(lc, 0.95);
-  roundRect(ctx, X.px - tw + 4, ty - 9, tw, 18, 3);
+  ctx.beginPath();
+  ctx.roundRect(X.px - tw + 4, ty - 9, tw, 18, 3);
   ctx.fill();
   text(ctx, lbl, X.px - 1, ty, PALETTE.bg, "right", 12, true);
   // stacked share bar: ask part above the boundary, bid part below (height ∝ share), sizes beside
@@ -328,16 +329,6 @@ function drawBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLa
   ctx.fillRect(bx - 2, y - 1, bw + 4, 2);
   text(ctx, formatSize(S.bestAskSz), bx + bw + 6, y - ha / 2, rgba(PALETTE.ask, 1), "left", 10, true);
   text(ctx, formatSize(S.bestBidSz), bx + bw + 6, y + hb / 2, rgba(PALETTE.bid, 1), "left", 10, true);
-}
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }
 
 /** Stepped cumulative profile behind the block column, per side. */

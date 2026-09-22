@@ -3,6 +3,7 @@ import type { Side, Trade } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
 import { casesHandled } from "../shared/result";
 import type { Pulse, TrailSample } from "./frame-sample.types";
+import { TRAIL_MS, pruneBefore } from "./trail";
 import { Spring } from "./spring";
 
 /**
@@ -20,8 +21,6 @@ const PULSE_TTL_MS = 1500;
 const PULSE_CAP = 6;
 /** A level at zero with nothing playing is forgotten after this long. */
 const DEAD_MS = 60_000;
-/** Trails keep this much history (v4 `TRAIL_MS`). */
-const TRAIL_MS = 12_000;
 
 /** One level's animation state as seen by the sampler. */
 export type LevelState = {
@@ -178,9 +177,7 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
     sampleTrails: (t) => {
       for (const e of entries.values()) {
         e.trail.push({ t, sz: e.live });
-        let drop = 0;
-        while (drop < e.trail.length && (e.trail[drop]?.t ?? t) < t - TRAIL_MS) drop++;
-        if (drop > 0) e.trail.splice(0, drop);
+        pruneBefore(e.trail, t - TRAIL_MS);
       }
     },
     get: (side, px) => {

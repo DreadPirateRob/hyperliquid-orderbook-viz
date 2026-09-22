@@ -22,7 +22,8 @@ export type WidgetState = {
   readonly trailsOn: boolean;
 };
 
-const BASE_STATE: Omit<RuntimeState, "trailsOn"> = {
+const BASE_STATE: RuntimeState = {
+  trailsOn: true,
   tapeOn: true,
   overlaysOn: true,
   paused: false,
@@ -45,10 +46,16 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const groupRef = useRef<HTMLSpanElement>(null);
   const runtimeRef = useRef<Runtime | null>(null);
   const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
-  const toggleTrails = useCallback(() => setTrailsOn((on) => !on), []);
   const feedProp = props.feed;
   const coin = props.coin;
   const onStateChange = props.onStateChange;
+  // User-driven changes notify the embedder from the handler itself, not from an effect.
+  const toggleTrails = useCallback(() => {
+    setTrailsOn((on) => {
+      onStateChange?.({ trailsOn: !on });
+      return !on;
+    });
+  }, [onStateChange]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -70,29 +77,27 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       }
       if (rootRef.current !== null) rootRef.current.dataset["connection"] = s.connection;
     };
-    const runtime = createRuntime({ canvas, feed, state: { ...BASE_STATE, trailsOn }, onStatus });
+    // Seeded with the base state; the sync effect below pushes the current toggles right after mount.
+    const runtime = createRuntime({ canvas, feed, state: BASE_STATE, onStatus });
     runtimeRef.current = runtime;
     return () => {
       runtime.dispose();
       runtimeRef.current = null;
     };
-    // The runtime is created once per feed/coin; state changes go through `update` below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedProp, coin]);
 
   useEffect(() => {
     runtimeRef.current?.update({ ...BASE_STATE, trailsOn });
-    onStateChange?.({ trailsOn });
-  }, [trailsOn, onStateChange]);
+  }, [trailsOn]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-      if (e.key === "t") setTrailsOn((on) => !on);
+      if (e.key === "t") toggleTrails();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [toggleTrails]);
 
   return (
     <div

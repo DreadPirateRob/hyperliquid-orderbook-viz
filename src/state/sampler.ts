@@ -4,6 +4,7 @@ import type { Tick } from "../domain/tick";
 import type { FrameRow, FrameSample, MidSample } from "./frame-sample.types";
 import type { LevelHistory } from "./level-history";
 import { Spring } from "./spring";
+import { TRAIL_DT, TRAIL_MS, pruneBefore } from "./trail";
 
 /**
  * The sampler turns an engine snapshot into one frame sample (v4's
@@ -19,9 +20,6 @@ export const ROW = 22;
 const ANCHOR_K = 40;
 const ANCHOR_C = 13;
 const RECENTRE_FRACTION = 0.3;
-/** Trail sampling (v4 `TRAIL_MS`, `TRAIL_DT`). */
-const TRAIL_MS = 12_000;
-const TRAIL_DT = 250;
 
 /** What the sampler needs from the host each frame. */
 export type SampleGeometry = {
@@ -97,9 +95,7 @@ export function createSampler(history: LevelHistory, options: SamplerOptions): S
         lastTrail = t;
         history.sampleTrails(t);
         midTrail.push({ t, b, a, share: bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5 });
-        let drop = 0;
-        while (drop < midTrail.length && (midTrail[drop]?.t ?? t) < t - TRAIL_MS) drop++;
-        if (drop > 0) midTrail.splice(0, drop);
+        pruneBefore(midTrail, t - TRAIL_MS);
       }
       if (!anchorSet) {
         anchor.snap(mid);
