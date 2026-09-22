@@ -4,6 +4,7 @@ import { ROW } from "../state/sampler";
 import { TRAIL_DT, TRAIL_MS } from "../state/trail";
 import type { PriceScale } from "../domain/tick";
 import type { DrawContext } from "./draw.types";
+import { TAPE_W } from "./tape";
 import type { Rgb } from "./palette";
 import { FONT, PALETTE, formatSize, rgba, sideColour, text } from "./palette";
 
@@ -16,7 +17,6 @@ import { FONT, PALETTE, formatSize, rgba, sideColour, text } from "./palette";
 /** v4 layout constants. */
 const BLOCK_W = 300;
 const GUTTER_W = 170;
-const TAPE_W = 200;
 const PERSISTENCE_MS = 20000;
 const RULER_DIM = 0.45;
 

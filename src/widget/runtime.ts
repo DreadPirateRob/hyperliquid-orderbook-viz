@@ -5,6 +5,7 @@ import * as Grouping from "../domain/grouping";
 import type { PriceScale } from "../domain/tick";
 import * as Tick from "../domain/tick";
 import { drawLadder } from "../render/ladder";
+import { drawTape } from "../render/tape";
 import { PALETTE } from "../render/palette";
 import { createLevelHistory } from "../state/level-history";
 import { createTape } from "../state/tape";
@@ -149,19 +150,18 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         ? undefined
         : sampler.sample({ snapshot, events, trades, settle }, { height, gridTick, ruler: state.ruler }, t, dt);
     if (S !== undefined && scale !== undefined) {
-      drawLadder(
-        {
-          ctx,
-          width,
-          height,
-          scale,
-          gridTick,
-          trailsOn: state.trailsOn,
-          tapeOn: state.tapeOn,
-          overlaysOn: state.overlaysOn,
-        },
-        S,
-      );
+      const draw = {
+        ctx,
+        width,
+        height,
+        scale,
+        gridTick,
+        trailsOn: state.trailsOn,
+        tapeOn: state.tapeOn,
+        overlaysOn: state.overlaysOn,
+      };
+      drawLadder(draw, S);
+      if (state.tapeOn) drawTape(draw, S);
     }
     if (t - lastStatus > STATUS_MS) {
       lastStatus = t;

@@ -16,6 +16,8 @@ function syncUrl(state: WidgetState): void {
   const url = new URL(location.href);
   if (state.trailsOn) url.searchParams.delete("trails");
   else url.searchParams.set("trails", "0");
+  if (state.tapeOn) url.searchParams.delete("tape");
+  else url.searchParams.set("tape", "0");
   history.replaceState(null, "", url);
 }
 
@@ -41,6 +43,7 @@ async function main(): Promise<void> {
       <OrderBook
         coin={feedCoin}
         trails={params.get("trails") !== "0"}
+        tape={params.get("tape") !== "0"}
         onStateChange={syncUrl}
         {...(feed === undefined ? {} : { feed })}
       />

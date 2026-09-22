@@ -13,6 +13,8 @@ export type OrderBookProps = {
   readonly feed?: FeedSource;
   /** Trails column on at mount; default on. */
   readonly trails?: boolean;
+  /** Tape column on at mount; default on. */
+  readonly tape?: boolean;
   /** Reports every user-driven state change so an embedder can mirror it (URL, storage). */
   readonly onStateChange?: (state: WidgetState) => void;
 };
@@ -20,6 +22,7 @@ export type OrderBookProps = {
 /** The user-facing toggles the widget owns. */
 export type WidgetState = {
   readonly trailsOn: boolean;
+  readonly tapeOn: boolean;
 };
 
 const BASE_STATE: RuntimeState = {
@@ -46,16 +49,23 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const groupRef = useRef<HTMLSpanElement>(null);
   const runtimeRef = useRef<Runtime | null>(null);
   const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
+  const [tapeOn, setTapeOn] = useState(props.tape ?? true);
   const feedProp = props.feed;
   const coin = props.coin;
   const onStateChange = props.onStateChange;
   // User-driven changes notify the embedder from the handler itself, not from an effect.
   const toggleTrails = useCallback(() => {
     setTrailsOn((on) => {
-      onStateChange?.({ trailsOn: !on });
+      onStateChange?.({ trailsOn: !on, tapeOn });
       return !on;
     });
-  }, [onStateChange]);
+  }, [onStateChange, tapeOn]);
+  const toggleTape = useCallback(() => {
+    setTapeOn((on) => {
+      onStateChange?.({ trailsOn, tapeOn: !on });
+      return !on;
+    });
+  }, [onStateChange, trailsOn]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -87,17 +97,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   }, [feedProp, coin]);
 
   useEffect(() => {
-    runtimeRef.current?.update({ ...BASE_STATE, trailsOn });
-  }, [trailsOn]);
+    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn });
+  }, [trailsOn, tapeOn]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       if (e.key === "t") toggleTrails();
+      if (e.key === "p") toggleTape();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleTrails]);
+  }, [toggleTrails, toggleTape]);
 
   return (
     <div
@@ -106,6 +117,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       data-coin={coin}
       data-feed={feedProp === undefined ? "live" : "injected"}
       data-trails={trailsOn ? "1" : "0"}
+      data-tape={tapeOn ? "1" : "0"}
     >
       <div className="orderbook-bar">
         <span className="orderbook-pair">{coin}</span>
@@ -117,6 +129,9 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         </span>
         <button type="button" className="orderbook-toggle" aria-pressed={trailsOn} onClick={toggleTrails}>
           trails
+        </button>
+        <button type="button" className="orderbook-toggle" aria-pressed={tapeOn} onClick={toggleTape}>
+          tape
         </button>
         <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
           CONNECTING
