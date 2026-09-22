@@ -3,6 +3,7 @@ import type { BookSnapshot, LevelEvent } from "../data/engine-api.types";
 import type { Level, Trade } from "../data/feed-events.types";
 import * as Tick from "../domain/tick";
 import { createLevelHistory } from "./level-history";
+import { createTape } from "./tape";
 import { ROW, createSampler } from "./sampler";
 import type { FrameInput } from "./sampler";
 
@@ -22,7 +23,7 @@ function input(snapshot: BookSnapshot): FrameInput {
   return { snapshot, events: [], trades: [], settle: false };
 }
 function sampler(reducedMotion = false) {
-  return createSampler(createLevelHistory({ reducedMotion: () => reducedMotion }), {
+  return createSampler(createLevelHistory({ reducedMotion: () => reducedMotion }), createTape(), {
     reducedMotion: () => reducedMotion,
   });
 }

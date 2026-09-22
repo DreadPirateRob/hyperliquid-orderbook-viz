@@ -7,6 +7,7 @@ import * as Tick from "../domain/tick";
 import { drawLadder } from "../render/ladder";
 import { PALETTE } from "../render/palette";
 import { createLevelHistory } from "../state/level-history";
+import { createTape } from "../state/tape";
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
 import type { ConnectionState } from "../data/engine-api.types";
@@ -76,7 +77,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const engine: Engine = createEngine({ gridTick });
   const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   const reducedMotion = (): boolean => reducedMotionQuery.matches;
-  const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }), { reducedMotion });
+  const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }), createTape(), { reducedMotion });
   let width = 0;
   let height = 0;
   let lastT = performance.now();

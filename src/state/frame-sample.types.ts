@@ -1,5 +1,6 @@
 import type { Side } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
+import type { TapeRow } from "./tape";
 
 /**
  * One frame's worth of presentation facts, produced by the sampler from the
@@ -72,6 +73,10 @@ export type FrameSample = {
   readonly bestAskSz: number;
   /** Touch history over the trails window, oldest first. */
   readonly midTrail: ReadonlyArray<MidSample>;
+  /** Tape rows, newest first (empty when the tape is off). */
+  readonly tape: ReadonlyArray<TapeRow>;
+  /** P95 print size over five minutes; `Infinity` below 20 prints. */
+  readonly tapeOutlier: number;
   /** Last print and its direction relative to the print before it. */
   readonly lastTrade: { readonly px: Tick; readonly dir: -1 | 0 | 1 } | undefined;
 };

@@ -4,6 +4,7 @@ import type { Tick } from "../domain/tick";
 import type { FrameRow, FrameSample, MidSample } from "./frame-sample.types";
 import type { LevelHistory } from "./level-history";
 import { Spring } from "./spring";
+import type { Tape } from "./tape";
 import { TRAIL_DT, TRAIL_MS, pruneBefore } from "./trail";
 
 /**
@@ -60,10 +61,11 @@ export type Sampler = {
  * Create a sampler with an unset anchor.
  *
  * @param history - The per-level animation store the sampler drives.
+ * @param tape - The trades tape the sampler feeds.
  * @param options - Motion preferences.
  * @returns A sampler.
  */
-export function createSampler(history: LevelHistory, options: SamplerOptions): Sampler {
+export function createSampler(history: LevelHistory, tape: Tape, options: SamplerOptions): Sampler {
   const anchor = new Spring(0, ANCHOR_K, ANCHOR_C);
   let anchorSet = false;
   let lastTrail = -Infinity;
@@ -73,6 +75,7 @@ export function createSampler(history: LevelHistory, options: SamplerOptions): S
     sample: ({ snapshot, events, trades, settle }, geometry, t, dt) => {
       history.applyLevelEvents(events, t);
       history.applyTrades(trades, t);
+      tape.apply(trades, t);
       for (const tr of trades) {
         const dir =
           lastTrade === undefined || tr.px === lastTrade.px ? (lastTrade?.dir ?? 0) : tr.px > lastTrade.px ? 1 : -1;
@@ -142,12 +145,15 @@ export function createSampler(history: LevelHistory, options: SamplerOptions): S
         bestBidSz: bb.sz,
         bestAskSz: aa.sz,
         midTrail,
+        tape: tape.rows(),
+        tapeOutlier: tape.outlierSize(t),
         lastTrade,
       };
     },
     reset: () => {
       anchorSet = false;
       history.clear();
+      tape.clear();
       midTrail.length = 0;
       lastTrade = undefined;
       lastTrail = -Infinity;
