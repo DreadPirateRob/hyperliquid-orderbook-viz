@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 19
 
 - [ ] Engine diff property test: applying a snapshot reconstructs it; events sum to the diff
