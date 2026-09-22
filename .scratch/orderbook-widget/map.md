@@ -52,6 +52,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - Tooling: Prettier formats (`npm run format`), oxlint lints, `npm run check` = typecheck + lint + tests. Format before each commit.- [Level motion](issues/20-motion.md): hist in the state layer, springs/pulses/persistence per v4, settle on tab return, reduced motion; parity gate passed.
 - [Trails and boundary overlay](issues/21-trails-boundary.md): 12 s gliding trails, touch paths with tags, boundary line, last-trade tag, share bar, trails toggle + URL; parity gate passed.
 - [Trades tape](issues/22-tape.md): aggregated tape store with P95 outliers, v4 drawTape column, `p` toggle; reset scope splits grouping vs coin; parity gate passed.
+- [Centre spine view](issues/24-spine.md): v4 drawSpine, `v` toggle, spine reclaims trails/tape columns (ADR 0009 amendment); tag geometry pinned by a recording-context test; parity gate passed.
 
 ## Not yet specified
 
