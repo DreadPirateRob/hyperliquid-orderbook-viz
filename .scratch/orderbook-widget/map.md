@@ -43,6 +43,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - [Metric Overlays Prototype](issues/17-metric-overlays-prototype.md): default view = ladder + trails + tape + overlays; size-delta strip beside the heat cell, resiliency bar under blocks, fast-only migration connector, book shape in the HUD; the ribbon row is replaced by a **boundary overlay**: bid/ask price paths with tags over the trails (gap = spread), last-trade tag on the price column, vertical stacked share bar in the gutter; trails-first layout with dimmed tiles; dropped order-count dots, spread text, last label, cost widget, imbalance-history bars, time axis. Amended metrics: cancel ratio by count (BBO flicker excluded), deferred trade attribution (600 ms grace), visible-window convexity. Branch `prototype/ladder` @ `802ae3c`.
 - [Record Fixtures](issues/09-record-fixtures.md): eight recordings kept as data in `fixtures/*.jsonl.gz` (header + raw `{rx,ch,data}` + control lines); grid-change fixture is labelled synthetic.
 - [Adrs](issues/10-adrs.md): ADRs 0001–0009 in `docs/adr/`; headline: 0003 data/state/rendering layer split (rendering → state → data), 0009 visual layer is a parity-gated port of prototype v4 with code shape held to the coding-standards skill.
+- [Spec](issues/11-spec.md): [spec.md](spec.md) — 57 stories, per-layer decisions, v4 constants as contract, four test seams (E2E with fixture feed, fixture→engine, facts→sample, parity gate).
 
 ## Not yet specified
 
