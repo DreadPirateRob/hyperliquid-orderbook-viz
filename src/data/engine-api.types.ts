@@ -60,6 +60,16 @@ export type SideMetrics = {
   readonly shape: ReadonlyArray<number>;
 };
 
+/** A level being watched for refill after losing at least half its size. */
+export type LevelWatch = {
+  readonly startedAt: number;
+  readonly before: number;
+  /** Refill time in ms, `Infinity` when capped, `undefined` while pending. */
+  readonly done: number | undefined;
+  /** Size ratio five seconds in, `undefined` while pending. */
+  readonly at5s: number | undefined;
+};
+
 /** Book-wide metrics, recomputed lazily when the version changes. */
 export type Metrics = {
   readonly version: number;
@@ -72,6 +82,15 @@ export type Metrics = {
   readonly ask: SideMetrics;
   readonly costBuy: ExecutionCost;
   readonly costSell: ExecutionCost;
+};
+
+/** A level that appears to have been repriced within one fast push (heuristic). */
+export type Migration = {
+  readonly side: Side;
+  readonly from: Tick;
+  readonly to: Tick;
+  /** Frame time the pairing was observed. */
+  readonly t: number;
 };
 
 /** Engine configuration; `gridTick` gates which BBO prices may enter the book (v4 `onGrid`). */
@@ -91,6 +110,12 @@ export type Engine = {
   readonly drain: () => ReadonlyArray<LevelEvent>;
   /** Live prints since the previous drain (historical backlog excluded). */
   readonly drainTrades: () => ReadonlyArray<Trade>;
+  /** Repricing pairs since the previous drain. */
+  readonly drainMigrations: () => ReadonlyArray<Migration>;
+  /** Decayed size-delta field for one price (ADR 0005). */
+  readonly field: (side: Side, px: Tick) => number;
+  /** Live resiliency watch for one price, if any. */
+  readonly watch: (side: Side, px: Tick) => LevelWatch | undefined;
   /** Derived metrics at `notional` quote units; cached per version. */
   readonly metrics: (notional: number) => Metrics;
   /** Forget everything and adopt a new grid; used on coin and precision change. Enters `RESYNCING`. */

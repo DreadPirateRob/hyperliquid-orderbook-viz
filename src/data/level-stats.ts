@@ -24,14 +24,11 @@ function key(side: Side, px: Tick): string {
   return `${side}:${px}`;
 }
 
-/** A level being watched after losing at least half its size. */
+/** Mutable form of the engine's `LevelWatch`. */
 export type Watch = {
   readonly startedAt: number;
-  /** Size before the loss. */
   readonly before: number;
-  /** Refill time in ms, `Infinity` once capped, `undefined` while pending. */
   done: number | undefined;
-  /** Size ratio five seconds in, `undefined` while pending. */
   at5s: number | undefined;
 };
 

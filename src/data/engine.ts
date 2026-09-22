@@ -10,6 +10,7 @@ import type {
   EngineConfig,
   LevelEvent,
   Metrics,
+  Migration,
   SideMetrics,
 } from "./engine-api.types";
 import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events.types";
@@ -66,6 +67,7 @@ class BookEngine implements Engine {
   private cachedNotional = Number.NaN;
   private readonly attribution: Attribution = createAttribution();
   private readonly stats: LevelStats = createLevelStats();
+  private migrations: Migration[] = [];
   private now = 0;
   private gridTick: number;
   private scale: PriceScale | undefined;
@@ -162,6 +164,12 @@ class BookEngine implements Engine {
     return out;
   };
 
+  readonly drainMigrations = (): ReadonlyArray<Migration> => {
+    const out = this.migrations;
+    this.migrations = [];
+    return out;
+  };
+
   readonly drainTrades = (): ReadonlyArray<Trade> => {
     const out = this.trades;
     this.trades = [];
@@ -233,6 +241,7 @@ class BookEngine implements Engine {
     this.trades = [];
     this.stats.clear();
     this.attribution.clear();
+    this.migrations = [];
     this.scale = config.scale;
     this.connection = "RESYNCING";
     this.bump();
@@ -304,6 +313,7 @@ class BookEngine implements Engine {
    * this is one merge pass producing the diff.
    */
   private applyWindow(side: Side, incoming: ReadonlyArray<Level>, stream: BookStream, rx: number): void {
+    const before = this.events.length;
     const s = this.sides[side];
     const best = incoming[0];
     const worst = incoming[incoming.length - 1];
@@ -342,6 +352,31 @@ class BookEngine implements Engine {
     }
     this.scratch = s;
     this.sides[side] = out;
+    if (stream === "fast") this.pairMigrations(before, rx);
+  }
+
+  /**
+   * Heuristic repricing: a level that vanished and one that appeared in the
+   * same fast push, same side, within 10 % size and 3 grid ticks, is reported
+   * as `migrated` (Derived Metrics §9). Confidence is heuristic by nature.
+   */
+  private pairMigrations(from: number, rx: number): void {
+    const vanished = [];
+    const added = [];
+    for (let i = from; i < this.events.length; i++) {
+      const e = this.events[i];
+      if (e === undefined) continue;
+      if (e.kind === "vanished") vanished.push(e);
+      else if (e.kind === "added") added.push(e);
+    }
+    for (const v of vanished) {
+      for (const a of added) {
+        if (Math.abs(a.to - v.from) > 0.1 * v.from) continue;
+        if (Math.abs(a.px - v.px) > 3 * this.gridTick) continue;
+        this.migrations.push({ side: v.side, from: v.px, to: a.px, t: rx });
+        break;
+      }
+    }
   }
 }
 
