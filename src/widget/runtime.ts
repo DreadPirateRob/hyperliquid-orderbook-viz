@@ -29,6 +29,8 @@ export type View = "ladder" | "spine";
 /** What the runtime reads from widget state each frame. */
 export type RuntimeState = {
   readonly view: View;
+  /** Execution-cost notional in quote units. */
+  readonly notional: number;
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
   readonly overlaysOn: boolean;
@@ -83,7 +85,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const engine: Engine = createEngine({ gridTick });
   const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   const reducedMotion = (): boolean => reducedMotionQuery.matches;
-  const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }), createTape(), { reducedMotion });
+  const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }), createTape(), {
+    reducedMotion,
+    notional: () => state.notional,
+  });
   let width = 0;
   let height = 0;
   let lastT = performance.now();
@@ -149,12 +154,18 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     ctx.fillRect(0, 0, width, height);
     const events = engine.drain();
     const trades = engine.drainTrades();
+    const migrations = engine.drainMigrations();
     const settle = snapPending;
     snapPending = false;
     const S =
       scale === undefined
         ? undefined
-        : sampler.sample({ snapshot, events, trades, settle }, { height, gridTick, ruler: state.ruler }, t, dt);
+        : sampler.sample(
+            { snapshot, events, trades, settle, migrations, ...(state.overlaysOn ? { engine } : {}) },
+            { height, gridTick, ruler: state.ruler },
+            t,
+            dt,
+          );
     if (S !== undefined && scale !== undefined) {
       const draw = {
         ctx,

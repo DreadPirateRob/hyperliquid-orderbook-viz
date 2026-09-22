@@ -1,5 +1,5 @@
-import type { BookSnapshot, LevelEvent } from "../data/engine-api.types";
-import type { Level, Trade } from "../data/feed-events.types";
+import type { BookSnapshot, LevelEvent, LevelWatch, Metrics, Migration } from "../data/engine-api.types";
+import type { Level, Side, Trade } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
 import type { FrameRow, FrameSample, MidSample } from "./frame-sample.types";
 import type { LevelHistory } from "./level-history";
@@ -37,14 +37,27 @@ export type FrameInput = {
   readonly snapshot: BookSnapshot;
   readonly events: ReadonlyArray<LevelEvent>;
   readonly trades: ReadonlyArray<Trade>;
+  /** Repricing pairs drained this frame. */
+  readonly migrations?: ReadonlyArray<Migration>;
+  /** Metric reader; omitted when overlays are off, so nothing is computed. */
+  readonly engine?: MetricSource;
   /** Fold the changes, then settle every spring and drop pulses before laying rows (tab return). */
   readonly settle: boolean;
+};
+
+/** What the sampler pulls from the engine for overlays. */
+export type MetricSource = {
+  readonly field: (side: Side, px: Tick) => number;
+  readonly watch: (side: Side, px: Tick) => LevelWatch | undefined;
+  readonly metrics: (notional: number) => Metrics;
 };
 
 /** Sampler options. */
 export type SamplerOptions = {
   /** OS reduced-motion preference, read per frame: the anchor snaps instead of gliding. */
   readonly reducedMotion: () => boolean;
+  /** Execution-cost notional in quote units. */
+  readonly notional: () => number;
 };
 
 /** The state layer's sampler. */
@@ -72,10 +85,13 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
   const anchor = new Spring(0, ANCHOR_K, ANCHOR_C);
   let anchorSet = false;
   let lastTrail = -Infinity;
+  const live: Migration[] = [];
   const midTrail: MidSample[] = [];
   let lastTrade: FrameSample["lastTrade"];
   return {
-    sample: ({ snapshot, events, trades, settle }, geometry, t, dt) => {
+    sample: ({ snapshot, events, trades, settle, migrations, engine }, geometry, t, dt) => {
+      if (migrations !== undefined && migrations.length > 0) live.push(...migrations);
+      pruneMigrations(live, t);
       history.applyLevelEvents(events, t);
       history.applyTrades(trades, t);
       tape.apply(trades, t);
@@ -117,16 +133,18 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
       const centre = anchor.step(dt);
       // Rows below zero are impossible prices; the top row is at least (rows − 1) grid steps so no row goes negative.
       const top = Math.max((rows - 1) * grid, Math.round(centre / grid) * grid + half * grid);
-      const out = layRows(rows, top, grid, b, a, snapshot, history, t);
+      const out = layRows(rows, top, grid, b, a, snapshot, history, t, engine);
       const midIdx = out.findIndex((r) => r.px < mid);
       const ribY = midIdx === -1 ? rows * ROW : midIdx * ROW;
       accumulate(out, midIdx, geometry.ruler);
       let maxSz = 0;
       let maxCum = 0;
+      let maxField = 0;
       for (const r of out) {
         if (!r.inRuler) continue;
         if (r.shown > maxSz) maxSz = r.shown;
         if (r.cum > maxCum) maxCum = r.cum;
+        if (Math.abs(r.field) > maxField) maxField = Math.abs(r.field);
       }
       const share = bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5;
       const lo = out[Math.max(0, midIdx - geometry.ruler)];
@@ -136,7 +154,7 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
         rows: out,
         maxSz: maxSz || 1,
         maxCum: maxCum || 1,
-        maxField: 1,
+        maxField: maxField || 1,
         ribY,
         rulerY: [lo?.y ?? 0, (hi?.y ?? rows * ROW) + ROW],
         midIdx,
@@ -148,6 +166,8 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
         bestBidSz: bb.sz,
         bestAskSz: aa.sz,
         midTrail,
+        migrations: live,
+        metrics: engine?.metrics(options.notional()),
         tape: tape.rows(),
         tapeOutlier: tape.outlierSize(t),
         lastTrade,
@@ -160,6 +180,7 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
       if (scope === "coin") {
         tape.clear();
         midTrail.length = 0;
+        live.length = 0;
         lastTrade = undefined;
       }
     },
@@ -178,6 +199,7 @@ function layRows(
   snapshot: BookSnapshot,
   history: LevelHistory,
   t: number,
+  engine: MetricSource | undefined,
 ): MutableRow[] {
   const bids = indexByPx(snapshot.bids);
   const asks = indexByPx(snapshot.asks);
@@ -199,7 +221,8 @@ function layRows(
       prev: h?.prev ?? live,
       cum: 0,
       inRuler: false,
-      field: 0,
+      field: side === "spread" || engine === undefined ? 0 : engine.field(side, px),
+      watch: side === "spread" || engine === undefined ? undefined : engine.watch(side, px),
       pulses: h?.pulses ?? EMPTY,
       first: h?.first ?? t,
       trail: h?.trail ?? EMPTY,
@@ -233,4 +256,11 @@ function accumulate(rows: MutableRow[], midIdx: number, ruler: number): void {
     cumA += r.shown;
     r.cum = cumA;
   }
+}
+
+/** Migration connectors fade over 600 ms and are dropped at 1.5 s (v4). */
+function pruneMigrations(list: Migration[], t: number): void {
+  let drop = 0;
+  while (drop < list.length && t - (list[drop]?.t ?? t) > 1500) drop++;
+  if (drop > 0) list.splice(0, drop);
 }

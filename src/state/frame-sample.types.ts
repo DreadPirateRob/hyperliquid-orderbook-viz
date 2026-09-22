@@ -1,3 +1,4 @@
+import type { LevelWatch, Metrics, Migration } from "../data/engine-api.types";
 import type { Side } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
 import type { TapeRow } from "./tape";
@@ -45,6 +46,8 @@ export type FrameRow = {
   readonly inRuler: boolean;
   /** Size-delta field value (ADR 0005). */
   readonly field: number;
+  /** Live resiliency watch, when the level lost at least half its size. */
+  readonly watch: LevelWatch | undefined;
   readonly pulses: ReadonlyArray<Pulse>;
   /** When the level first appeared, for persistence saturation. */
   readonly first: number;
@@ -77,6 +80,10 @@ export type FrameSample = {
   readonly tape: ReadonlyArray<TapeRow>;
   /** P95 print size over five minutes; `Infinity` below 20 prints. */
   readonly tapeOutlier: number;
+  /** Repricing pairs still fading. */
+  readonly migrations: ReadonlyArray<Migration>;
+  /** Book-wide metrics at the current notional, or `undefined` when overlays are off. */
+  readonly metrics: Metrics | undefined;
   /** Last print and its direction relative to the print before it. */
   readonly lastTrade: { readonly px: Tick; readonly dir: -1 | 0 | 1 } | undefined;
 };

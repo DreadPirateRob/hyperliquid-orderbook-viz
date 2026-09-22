@@ -30,6 +30,7 @@ export type WidgetState = {
 
 const BASE_STATE: RuntimeState = {
   view: "ladder",
+  notional: 100_000,
   trailsOn: true,
   tapeOn: true,
   overlaysOn: true,
