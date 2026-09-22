@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 20
 
 - [ ] Sampler test: trail sampling at 250 ms, window 12 s, path y from BBO, scroll fraction between samples
