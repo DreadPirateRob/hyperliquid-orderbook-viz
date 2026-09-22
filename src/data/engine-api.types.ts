@@ -56,8 +56,6 @@ export type SideMetrics = {
   readonly medianRefillMs: number | undefined;
   readonly refillAt5s: number | undefined;
   readonly convexity: number | undefined;
-  /** Cumulative curve, best outward, for the shape sparkline. */
-  readonly shape: ReadonlyArray<number>;
 };
 
 /** A level being watched for refill after losing at least half its size. */

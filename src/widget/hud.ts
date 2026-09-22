@@ -36,7 +36,7 @@ export function hudText(input: HudInput): string {
     `         by vol    bid ${pct(m?.bid.cancelRatioVolume)}  ask ${pct(m?.ask.cancelRatioVolume)}`,
     `CHURN/s  bid ${num(m?.bid.eventChurn, 1)}  ask ${num(m?.ask.eventChurn, 1)}   vol bid ${num(m?.bid.volumeChurn, 2)}  ask ${num(m?.ask.volumeChurn, 2)}`,
     `REFILL   median bid ${ms(m?.bid.medianRefillMs)}  ask ${ms(m?.ask.medianRefillMs)}   @5s bid ${pct(m?.bid.refillAt5s)}  ask ${pct(m?.ask.refillAt5s)}`,
-    `CONVEX   bid ${num(m?.bid.convexity, 2)}  ask ${num(m?.ask.convexity, 2)}`,
+    `CONVEX   bid ${num(m?.bid.convexity, 2)}  ask ${num(m?.ask.convexity, 2)}   (depth share nearest the touch)`,
     `COST ${notionalLabel(input.notional)}  buy ${bps(m?.costBuy.slippageBps)}${flag(m?.costBuy.exceedsVisibleDepth)}   sell ${bps(m?.costSell.slippageBps)}${flag(m?.costSell.exceedsVisibleDepth)}`,
     "",
     `RENDER   ${input.fps.toFixed(1)} fps   frame p50 ${input.frameP50.toFixed(2)} ms   p95 ${input.frameP95.toFixed(2)} ms`,

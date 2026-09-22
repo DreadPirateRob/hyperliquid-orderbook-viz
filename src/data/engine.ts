@@ -16,7 +16,7 @@ import type {
 import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events.types";
 import { createLevelStats } from "./level-stats";
 import type { LevelStats } from "./level-stats";
-import { convexity, cumulativeCurve, executionCost } from "./metrics";
+import { convexity, executionCost } from "./metrics";
 
 /**
  * Snapshot-native engine (ADR 0001, 0007). Each side is a pair of typed
@@ -211,7 +211,7 @@ class BookEngine implements Engine {
 
   private sideMetrics(side: Side, levels: ReadonlyArray<Level>): SideMetrics {
     const w = this.stats.window(side, this.now);
-    return { ...w, convexity: convexity(levels), shape: cumulativeCurve(levels) };
+    return { ...w, convexity: convexity(levels) };
   }
 
   private cost(levels: ReadonlyArray<Level>, notional: number, mid: number) {

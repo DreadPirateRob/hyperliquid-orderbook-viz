@@ -13,7 +13,7 @@ import { createTape } from "../state/tape";
 import { hudText } from "./hud";
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
-import type { ConnectionState, Metrics } from "../data/engine-api.types";
+import type { ConnectionState } from "../data/engine-api.types";
 
 /**
  * The imperative shell behind `<OrderBook>` (ADR 0008): owns the engine,
@@ -50,8 +50,6 @@ export type RuntimeStatus = {
   readonly groupLabel: string;
   /** Metrics HUD text; empty when metrics are off. */
   readonly hud: string;
-  /** Current metrics for the shape panel, or `undefined` when off. */
-  readonly metrics: Metrics | undefined;
 };
 
 /** Host inputs. */
@@ -211,7 +209,6 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         mid: S === undefined || scale === undefined ? "–" : Tick.formatMid(S.mid, scale),
         coin: market?.coin ?? "–",
         groupLabel,
-        metrics,
         hud: state.metricsOn
           ? hudText({
               coin: market?.coin ?? "–",

@@ -7,7 +7,7 @@ import * as Tick from "../domain/tick";
 import { createEngine } from "./engine";
 import type { Level } from "./feed-events.types";
 import { parseFixture } from "./fixture";
-import { executionCost, convexity, cumulativeCurve } from "./metrics";
+import { convexity, executionCost } from "./metrics";
 import { parseWireMessage } from "./wire";
 
 function scaleOf(): Tick.PriceScale {
@@ -86,12 +86,6 @@ describe("convexity", () => {
 
   it("is undefined below four levels", () => {
     expect(convexity([lvl("100.0", 1), lvl("101.0", 1)])).toBeUndefined();
-  });
-});
-
-describe("cumulative curve", () => {
-  it("accumulates from the touch outward", () => {
-    expect(cumulativeCurve([lvl("100.0", 1), lvl("101.0", 2), lvl("102.0", 3)])).toEqual([1, 3, 6]);
   });
 });
 

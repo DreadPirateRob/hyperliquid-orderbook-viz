@@ -2,7 +2,6 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedSource } from "../data/feed-events.types";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
-import { drawShapePanel } from "../render/shape-panel";
 import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
 import { createRuntime } from "./runtime";
 
@@ -60,7 +59,6 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const connRef = useRef<HTMLSpanElement>(null);
   const groupRef = useRef<HTMLSpanElement>(null);
   const hudRef = useRef<HTMLPreElement>(null);
-  const shapeRef = useRef<HTMLCanvasElement>(null);
   const runtimeRef = useRef<Runtime | null>(null);
   const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
   const [tapeOn, setTapeOn] = useState(props.tape ?? true);
@@ -125,7 +123,6 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       }
       if (rootRef.current !== null) rootRef.current.dataset["connection"] = s.connection;
       if (hudRef.current !== null && s.hud !== "") hudRef.current.textContent = s.hud;
-      if (shapeRef.current !== null && s.hud !== "") drawShapePanel(shapeRef.current, s.metrics);
     };
     // Seeded with the base state; the sync effect below pushes the current toggles right after mount.
     const runtime = createRuntime({ canvas, feed, state: BASE_STATE, onStatus });
@@ -196,7 +193,6 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       {metricsOn ? (
         <div className="orderbook-hud">
           <pre ref={hudRef} />
-          <canvas ref={shapeRef} width={240} height={90} aria-hidden="true" />
         </div>
       ) : null}
     </div>

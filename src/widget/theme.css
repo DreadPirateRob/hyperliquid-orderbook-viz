@@ -109,9 +109,6 @@ body,
   top: 56px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
   padding: 10px 14px;
   background: #0f1319f2;
   border: 1px solid #ffffff1a;

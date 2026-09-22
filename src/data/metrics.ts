@@ -77,22 +77,6 @@ export function convexity(levels: ReadonlyArray<Level>): number | undefined {
 }
 
 /**
- * Cumulative depth from the touch outward, for the shape sparkline.
- *
- * @param levels - The side, best first.
- * @returns Running totals, one per level.
- */
-export function cumulativeCurve(levels: ReadonlyArray<Level>): ReadonlyArray<number> {
-  const out: number[] = [];
-  let sum = 0;
-  for (const level of levels) {
-    sum += level.sz;
-    out.push(sum);
-  }
-  return out;
-}
-
-/**
  * Exponentially decayed accumulator for the size-delta field (ADR 0005):
  * `F ← F·e^(−Δt/τ) + delta`.
  *
