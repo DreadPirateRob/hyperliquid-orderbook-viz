@@ -184,6 +184,7 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
       ctx.fillStyle = rgba(c, 0.12 * ps.grew);
       ctx.fillRect(X.block, y, X.blockW, ROW);
     }
+    if (d.overlaysOn) drawRowOverlays(ctx, row, X, S, d);
     text(ctx, label, X.px, cy, round ? PALETTE.text : rgba(c, 0.9), "right", 12, round);
     if (d.trailsOn) {
       const lx = X.block + w + 6;
@@ -206,7 +207,64 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
     drawTouchPaths(ctx, S, X, CH, d.scale);
   }
   drawRuler(ctx, S, X, W);
+  if (d.overlaysOn) drawMigrations(ctx, S, X, d);
   drawBoundary(ctx, S, X, d);
+}
+
+/**
+ * v4's per-row overlays: the size-delta strip (sign = pressure direction) and
+ * the resiliency bar refilling toward 80 % of the level's pre-loss size.
+ */
+function drawRowOverlays(
+  ctx: CanvasRenderingContext2D,
+  row: FrameRow,
+  X: LadderLayout,
+  S: FrameSample,
+  d: DrawContext,
+): void {
+  if (row.side === "spread") return;
+  const f = row.field / S.maxField;
+  if (Math.abs(f) > 0.03) {
+    const up = (row.side === "bid") === f > 0;
+    const fx = d.trailsOn ? X.lane : X.block - 8;
+    ctx.fillStyle = rgba(up ? PALETTE.bid : PALETTE.ask, 0.6 * Math.min(1, Math.abs(f)));
+    ctx.fillRect(fx, row.y + 3, 4, ROW - 6);
+  }
+  const w = row.watch;
+  if (w === undefined) return;
+  const target = 0.8 * w.before;
+  const frac = Math.min(1, row.live / target);
+  const capped = w.done === Number.POSITIVE_INFINITY;
+  const done = w.done !== undefined && !capped;
+  const bw = (target / S.maxSz) * X.blockW;
+  ctx.fillStyle = "#ffffff14";
+  ctx.fillRect(X.block, row.y + ROW - 5, bw, 2);
+  ctx.fillStyle = capped ? rgba(PALETTE.hot, 0.9) : done ? rgba(PALETTE.bid, 0.9) : rgba(PALETTE.white, 0.7);
+  ctx.fillRect(X.block, row.y + ROW - 5, bw * frac, 2);
+}
+
+/** v4's migration connectors: a dashed link between the old and new row, decaying over 600 ms. */
+function drawMigrations(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayout, d: DrawContext): void {
+  const x = d.trailsOn ? X.lane + 2 : X.block - 14;
+  for (const m of S.migrations) {
+    const from = S.rows.find((r) => r.px === m.from);
+    const to = S.rows.find((r) => r.px === m.to);
+    if (from === undefined || to === undefined) continue;
+    const a = Math.exp(-(S.t - m.t) / 600);
+    const c = sideColour(m.side);
+    ctx.strokeStyle = rgba(c, 0.9 * a);
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, from.y + ROW / 2);
+    ctx.lineTo(x, to.y + ROW / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = rgba(c, 0.9 * a);
+    ctx.beginPath();
+    ctx.arc(x, to.y + ROW / 2, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 /** v4 `trailStrip`: one tile per sample, positioned by time so the strip glides; fill dots at trade times. */
