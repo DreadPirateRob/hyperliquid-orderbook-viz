@@ -93,6 +93,8 @@ export type Engine = {
   readonly snapshot: () => BookSnapshot;
   /** Level events since the previous drain, in arrival order. */
   readonly drain: () => ReadonlyArray<LevelEvent>;
+  /** Live prints since the previous drain (historical backlog excluded). */
+  readonly drainTrades: () => ReadonlyArray<Trade>;
   /** Derived metrics at `notional` quote units; cached per version. */
   readonly metrics: (notional: number) => Metrics;
   /** Forget everything and adopt a new grid; used on coin and precision change. Enters `RESYNCING`. */

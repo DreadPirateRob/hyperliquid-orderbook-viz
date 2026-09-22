@@ -39,6 +39,7 @@ class BookEngine implements Engine {
   private readonly sides: Record<Side, SideStore> = { bid: makeSide(64), ask: makeSide(64) };
   private scratch: SideStore = makeSide(64);
   private events: LevelEvent[] = [];
+  private trades: Trade[] = [];
   private version = 0;
   private connection: ConnectionState = "CONNECTING";
   private bestBid: Level | undefined;
@@ -67,7 +68,10 @@ class BookEngine implements Engine {
         return;
       case "trades":
         if (event.historical) return;
-        for (const t of event.trades) this.lastTrade = t;
+        for (const t of event.trades) {
+          this.lastTrade = t;
+          this.trades.push(t);
+        }
         if (event.trades.length > 0) this.bump();
         return;
       case "ack":
@@ -126,6 +130,12 @@ class BookEngine implements Engine {
     return out;
   };
 
+  readonly drainTrades = (): ReadonlyArray<Trade> => {
+    const out = this.trades;
+    this.trades = [];
+    return out;
+  };
+
   readonly metrics = (): never => notYetImplemented("engine metrics land with the overlays ticket");
 
   readonly reset = (config: EngineConfig): void => {
@@ -138,6 +148,7 @@ class BookEngine implements Engine {
     this.lastFastRx = 0;
     this.lastSlowRx = 0;
     this.events = [];
+    this.trades = [];
     this.connection = "RESYNCING";
     this.bump();
   };
