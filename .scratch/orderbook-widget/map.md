@@ -44,6 +44,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - [Record Fixtures](issues/09-record-fixtures.md): eight recordings kept as data in `fixtures/*.jsonl.gz` (header + raw `{rx,ch,data}` + control lines); grid-change fixture is labelled synthetic.
 - [Adrs](issues/10-adrs.md): ADRs 0001–0009 in `docs/adr/`; headline: 0003 data/state/rendering layer split (rendering → state → data), 0009 visual layer is a parity-gated port of prototype v4 with code shape held to the coding-standards skill.
 - [Spec](issues/11-spec.md): [spec.md](spec.md) — 57 stories, per-layer decisions, v4 constants as contract, four test seams (E2E with fixture feed, fixture→engine, facts→sample, parity gate).
+- [Tickets](issues/12-tickets.md): eleven vertical tracer bullets (18 scaffold → 19 ladder rows → 20 motion → trails/tape/spine → overlays; grouping, pairs; responsive; proof), parity gate per visual slice, atomic commits per step.
 
 ## Not yet specified
 
