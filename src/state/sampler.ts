@@ -51,8 +51,11 @@ export type SamplerOptions = {
 export type Sampler = {
   /** Fold the frame's changes into the history and produce a frame, or nothing until both sides have a best. */
   readonly sample: (input: FrameInput, geometry: SampleGeometry, t: number, dt: number) => FrameSample | undefined;
-  /** Forget anchor and history (coin/grouping change). */
-  readonly reset: () => void;
+  /**
+   * Forget the ladder. `"grid"` (grouping/precision change) keeps the tape and
+   * touch trail, as v4's `resetLadder` does; `"coin"` forgets everything.
+   */
+  readonly reset: (scope: "coin" | "grid") => void;
   /** True while anything is still animating. */
   readonly moving: () => boolean;
 };
@@ -150,13 +153,15 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
         lastTrade,
       };
     },
-    reset: () => {
+    reset: (scope) => {
       anchorSet = false;
       history.clear();
-      tape.clear();
-      midTrail.length = 0;
-      lastTrade = undefined;
       lastTrail = -Infinity;
+      if (scope === "coin") {
+        tape.clear();
+        midTrail.length = 0;
+        lastTrade = undefined;
+      }
     },
     moving: () => anchor.moving || history.moving(),
   };

@@ -105,12 +105,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const stopFeed = options.feed.start((event) => {
     if (disposed) return;
     if (event._tag === "market") {
-      market = event.market;
       scale = event.market.scale;
       gridTick = Grouping.gridTickFor(event.market.mark, event.market.precision, scale);
       groupLabel = Grouping.deriveOptions(event.market.mark, scale).find((o) => o.gridTick === gridTick)?.label ?? "–";
+      const sameCoin = market?.coin === event.market.coin;
+      market = event.market;
       engine.reset({ gridTick });
-      sampler.reset();
+      sampler.reset(sameCoin ? "grid" : "coin");
       return;
     }
     if (state.paused && event._tag !== "connection" && event._tag !== "tick") return;

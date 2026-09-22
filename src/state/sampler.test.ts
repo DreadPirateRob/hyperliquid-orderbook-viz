@@ -230,3 +230,19 @@ describe("trails and last trade", () => {
     expect(f?.bestAskSz).toBe(6);
   });
 });
+
+describe("reset scope", () => {
+  it("keeps the tape across a grouping change and clears it on a coin change", () => {
+    const s = sampler();
+    const snap = book([lvl(1000, 1)], [lvl(1010, 1)]);
+    let f = s.sample({ snapshot: snap, events: [], trades: [tr(1010, "B")], settle: false }, geometry, 0, 0.016);
+    expect(f?.tape.length).toBe(1);
+    s.reset("grid");
+    f = s.sample(input(snap), geometry, 16, 0.016);
+    expect(f?.tape.length, "v4 resetLadder keeps trades and tape").toBe(1);
+    s.reset("coin");
+    f = s.sample(input(snap), geometry, 32, 0.016);
+    expect(f?.tape).toEqual([]);
+    expect(f?.lastTrade).toBeUndefined();
+  });
+});
