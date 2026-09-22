@@ -138,3 +138,12 @@ test("escape closes the picker and returns focus to its trigger", async ({ page 
   await expect(page.locator(".orderbook-pairpop")).toHaveCount(0);
   await expect(page.locator(".orderbook-pair")).toBeFocused();
 });
+
+test("a shared link's grouping survives the load", async ({ page }) => {
+  await page.goto("/?coin=BTC&g=50");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 25_000 });
+  // The request is made before the option list exists, so the runtime must replay it.
+  await expect(page.locator(".orderbook-group")).toHaveText("$5", { timeout: 20_000 });
+  await expect(page).toHaveURL(/g=50/);
+});

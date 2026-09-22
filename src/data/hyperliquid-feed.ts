@@ -58,6 +58,7 @@ class Session {
   private precision: Precision | undefined;
   private tradesHistorical = true;
   private gate: SubscriptionGate | undefined;
+  private wanted: Precision | undefined;
   private mark = 1;
 
   constructor(
@@ -106,6 +107,17 @@ class Session {
     this.ws = ws;
     this.listener({ _tag: "connection", event: { _tag: "connecting" }, rx: Date.now() });
     ws.addEventListener("open", () => {
+      // A precision asked for before the socket opened (a `g` share link) is
+      // adopted here, so the first subscription is already the wanted one.
+      if (this.wanted !== undefined && this.scale !== undefined) {
+        this.precision = this.wanted;
+        this.wanted = undefined;
+        this.listener({
+          _tag: "market",
+          market: { coin: this.options.coin, scale: this.scale, precision: this.precision, mark: this.mark },
+          rx: Date.now(),
+        });
+      }
       if (this.precision !== undefined && this.scale !== undefined) {
         this.gate = createSubscriptionGate(this.precision, Grouping.gridTickFor(this.mark, this.precision, this.scale));
       }
@@ -133,8 +145,12 @@ class Session {
    */
   readonly select = (coin: string, precision: Precision): void => {
     if (coin !== this.options.coin || this.scale === undefined) return;
-    const action = this.gate?.select(precision, Grouping.gridTickFor(this.mark, precision, this.scale));
-    if (action?._tag === "resubscribe") this.resubscribe(action.to);
+    if (this.gate === undefined) {
+      this.wanted = precision;
+      return;
+    }
+    const action = this.gate.select(precision, Grouping.gridTickFor(this.mark, precision, this.scale));
+    if (action._tag === "resubscribe") this.resubscribe(action.to);
   };
 
   /** Unsubscribe both books, announce the new market, then subscribe both. */

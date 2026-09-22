@@ -136,6 +136,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   observer.observe(canvas);
   resize();
 
+  const applyWantedGrid = (): void => {
+    const wanted = state.gridTick;
+    if (wanted === undefined || wanted === gridTick || market === undefined) return;
+    const option = groupOptions.find((o) => o.gridTick === wanted);
+    if (option !== undefined) options.feed.select(market.coin, option.precision);
+  };
+
   const stopFeed = options.feed.start((event) => {
     if (disposed) return;
     if (event._tag === "market") {
@@ -149,6 +156,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       engine.reset({ gridTick, scale, keepTouch: sameCoin });
       sampler.reset(sameCoin ? "grid" : "coin");
       if (!sameCoin) lastFrame = undefined;
+      applyWantedGrid();
       return;
     }
     if (state.paused && event._tag !== "connection" && event._tag !== "tick") return;
@@ -164,6 +172,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   };
   document.addEventListener("visibilitychange", onVisibility);
 
+  /**
+   * Ask the feed for the grouping the widget wants. A request made before the
+   * market is known (a `g` URL param, say) is not lost: the option list only
+   * exists once the market arrives, so this runs again then.
+   */
   const frame = (): void => {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
@@ -273,12 +286,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 
   return {
     update: (next) => {
-      const wanted = next.gridTick;
-      if (wanted !== undefined && wanted !== gridTick && market !== undefined) {
-        const option = groupOptions.find((o) => o.gridTick === wanted);
-        if (option !== undefined) options.feed.select(market.coin, option.precision);
-      }
       state = next;
+      applyWantedGrid();
     },
     dispose: () => {
       disposed = true;
