@@ -4,10 +4,10 @@
 
 **Blocked by:** 21, 22, 23, 24, 26
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 21, 22, 23, 24, 26
 
 - [ ] E2E at 390×844 DPR 3 reaches LIVE and paints the spine
