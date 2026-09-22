@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { PriceScale } from "../domain/tick";
+import type { MarketKind, PriceScale } from "../domain/tick";
 import * as Tick from "../domain/tick";
 import type { Result } from "../shared/result";
 import { err, ok } from "../shared/result";
@@ -21,6 +21,13 @@ const SpotMeta = z.object({
   tokens: z.array(z.object({ name: z.string(), szDecimals: z.number().int() })),
 });
 const AllMids = z.record(z.string(), z.string());
+const AssetCtx = z.object({
+  markPx: z.string(),
+  prevDayPx: z.string().nullish(),
+  dayNtlVlm: z.string().nullish(),
+  funding: z.string().nullish(),
+});
+const MetaAndAssetCtxs = z.tuple([Meta, z.array(AssetCtx)]);
 
 /** The venue answered, but not with the expected shape. */
 export class InfoMalformed extends Error {
@@ -57,6 +64,25 @@ export class UnknownCoin extends Error {
 
 /** Errors a caller must handle. */
 export type InfoError = InfoMalformed | InfoUnavailable | UnknownCoin | Tick.InvalidScale;
+
+/** One selectable market. */
+export type MarketSummary = {
+  /** Subscription id: `"BTC"` or `"@107"`. */
+  readonly coin: string;
+  /** What the user reads: `"BTC"` or `"HYPE/USDC"`. */
+  readonly display: string;
+  readonly kind: MarketKind;
+  readonly szDecimals: number;
+};
+
+/** Top-bar context for one coin. */
+export type MarketStats = {
+  readonly mark: number;
+  /** 24 h change in percent; spot pairs have no previous close. */
+  readonly changePct: number | undefined;
+  readonly dayVolume: number | undefined;
+  readonly funding: number | undefined;
+};
 
 /** What the widget needs before subscribing. */
 export type MarketMeta = {
@@ -131,4 +157,66 @@ async function info<T>(
   const parsed = schema.safeParse(body);
   if (!parsed.success) return err(new InfoMalformed(type, z.prettifyError(parsed.error)));
   return ok(parsed.data);
+}
+
+/**
+ * The tradeable universe: perps that are not delisted, then spot pairs whose
+ * tokens both exist in the token table (the venue lists rows referencing
+ * token indexes it does not publish).
+ *
+ * @param fetchFn - The fetch implementation to use.
+ * @returns Markets in venue order, or a tagged info error.
+ */
+export async function fetchUniverse(fetchFn: Fetch): Promise<Result<ReadonlyArray<MarketSummary>, InfoError>> {
+  const [perp, spot] = await Promise.all([info("meta", Meta, fetchFn), info("spotMeta", SpotMeta, fetchFn)]);
+  if (perp._tag === "err") return perp;
+  if (spot._tag === "err") return spot;
+  const out: MarketSummary[] = [];
+  for (const u of perp.value.universe) {
+    if (u.isDelisted === true) continue;
+    out.push({ coin: u.name, display: u.name, kind: "perp", szDecimals: u.szDecimals });
+  }
+  for (const pair of spot.value.universe) {
+    const base = spot.value.tokens[pair.tokens[0]];
+    const quote = spot.value.tokens[pair.tokens[1]];
+    if (base === undefined || quote === undefined) continue;
+    out.push({ coin: pair.name, display: `${base.name}/${quote.name}`, kind: "spot", szDecimals: base.szDecimals });
+  }
+  return ok(out);
+}
+
+/**
+ * Per-coin context for the top bar, refreshed on a timer by the caller.
+ *
+ * @param fetchFn - The fetch implementation to use.
+ * @returns Stats keyed by coin, or a tagged info error.
+ */
+export async function fetchStats(fetchFn: Fetch): Promise<Result<Record<string, MarketStats>, InfoError>> {
+  const [ctxs, mids] = await Promise.all([
+    info("metaAndAssetCtxs", MetaAndAssetCtxs, fetchFn),
+    info("allMids", AllMids, fetchFn),
+  ]);
+  if (ctxs._tag === "err") return ctxs;
+  if (mids._tag === "err") return mids;
+  const [universe, contexts] = ctxs.value;
+  const out: Record<string, MarketStats> = {};
+  universe.universe.forEach((u, i) => {
+    const c = contexts[i];
+    if (c === undefined) return;
+    const mark = Number(c.markPx);
+    const prev = c.prevDayPx == null ? Number.NaN : Number(c.prevDayPx);
+    out[u.name] = {
+      mark,
+      changePct: Number.isFinite(prev) && prev !== 0 ? (mark / prev - 1) * 100 : undefined,
+      dayVolume: c.dayNtlVlm == null ? undefined : Number(c.dayNtlVlm),
+      funding: c.funding == null ? undefined : Number(c.funding),
+    };
+  });
+  for (const [coin, px] of Object.entries(mids.value)) {
+    if (!coin.startsWith("@")) continue;
+    const mark = Number(px);
+    if (!Number.isFinite(mark)) continue;
+    out[coin] = { mark, changePct: undefined, dayVolume: undefined, funding: undefined };
+  }
+  return ok(out);
 }
