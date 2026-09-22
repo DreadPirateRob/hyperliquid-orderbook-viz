@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { FeedSource } from "../data/feed-events";
+import type { FeedSource } from "../data/feed-events.types";
 
 /** Props seed the initial state only (ADR 0008); later changes are reported, not applied. */
 export type OrderBookProps = {

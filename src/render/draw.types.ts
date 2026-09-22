@@ -1,5 +1,5 @@
 import type { PriceScale } from "../domain/tick";
-import type { FrameSample } from "../state/frame-sample";
+import type { FrameSample } from "../state/frame-sample.types";
 
 /** Everything a draw function needs beyond the sample: geometry and formatting. */
 export type DrawContext = {

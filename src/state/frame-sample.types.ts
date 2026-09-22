@@ -1,4 +1,4 @@
-import type { Side } from "../data/feed-events";
+import type { Side } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
 
 /**

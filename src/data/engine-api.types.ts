@@ -1,5 +1,5 @@
 import type { Tick } from "../domain/tick";
-import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events";
+import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events.types";
 
 /**
  * The engine is the data layer's core (ADR 0001, 0003): it fuses the four
