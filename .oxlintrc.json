@@ -17,11 +17,17 @@
     "typescript/no-non-null-assertion": "error",
     "typescript/consistent-type-imports": "error",
     "no-console": "warn",
-    "no-underscore-dangle": "off"
+    "no-underscore-dangle": "off",
+    "react/react-in-jsx-scope": "off"
   },
   "ignorePatterns": [
     "dist",
     "prototype",
     "node_modules"
-  ]
+  ],
+  "settings": {
+    "react": {
+      "version": "19"
+    }
+  }
 }

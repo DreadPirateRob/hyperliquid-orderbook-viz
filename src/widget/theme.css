@@ -1,0 +1,28 @@
+/* Palette is v4's (ADR 0009); changing it requires an ADR amendment. */
+:root {
+  --bg: #0b0e11;
+  --text: #e5e7eb;
+  --dim: #6b7280;
+  --bid: rgb(45, 212, 191);
+  --ask: rgb(251, 113, 133);
+  --hot: rgb(251, 191, 36);
+  --mid: rgb(96, 165, 250);
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 12px ui-monospace, "JetBrains Mono", Menlo, monospace;
+}
+
+.orderbook {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
