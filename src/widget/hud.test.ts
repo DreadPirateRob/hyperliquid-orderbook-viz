@@ -26,7 +26,6 @@ const metrics = {
     medianRefillMs: 2500,
     refillAt5s: 0.8,
     convexity: 0.3,
-    shape: [1],
   },
   ask: {
     eventChurn: 1,
@@ -36,7 +35,6 @@ const metrics = {
     medianRefillMs: Number.POSITIVE_INFINITY,
     refillAt5s: undefined,
     convexity: undefined,
-    shape: [1],
   },
   costBuy: { vwap: 100, slippageBps: 0.13, filledFraction: 1, levels: 3, exceedsVisibleDepth: false },
   costSell: { vwap: 99, slippageBps: 12.5, filledFraction: 0.4, levels: 9, exceedsVisibleDepth: true },
