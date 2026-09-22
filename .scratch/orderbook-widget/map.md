@@ -14,6 +14,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - **Standing preference**: default to the most senior engineering approach; drop it only when the overhead is demonstrably unjustified, and decide that together, never silently.
 - **Honesty rule**: the feed is full snapshots (`l2Book`), not deltas: observed ~5.4 s median between 20-level pushes, ~0.54 s with `fast: true` (5 levels). Every "senior" mechanism must have a real producer in this feed or be labelled synthetic. No sequence numbers, no gap counts, no per-order OFI. ADRs say why.
 - **Inspiration**: tapesurf.com order-book view (screenshots in the charting session: heat cells, depth profile, depth ruler, cumulative labels, best line, spread row, flow histograms). Feel + layout + motion all wanted.
+- **Retrospective (first build, branch `attempt/react-v1`, reset from `ea30749` to `4adea87`)**: the visual layer was re-derived from the spec by AFK agents against contracts nobody had run end to end; look and motion diverged from prototype v4 (row-keyed animation state → snapping/melting bars, stepped trails, a permanent dim veil, extra tooltip/spine-trails/tape). Rule from now on: **the visual layer is a port of `prototype/ladder-prototype-v4.html`, transliterated line for line, with a side-by-side parity gate the user signs off, and no AFK agents on it.** Feed adapter, engine, metrics, fixtures, ADRs and spec sections on feed/engine from that branch are salvageable.
 - **Skills every session consults**: `grilling` + `domain-modeling` for decision tickets; `prototype` for visual/animation tickets; `research` for AFK fact-finding. Glossary lives in `CONTEXT.md`; challenge new terms against it.
 - **Locked in charting** (not ticketed, already decided):
   - Feeds: slow + fast `l2Book`, `trades`, `bbo`, one socket (see Feed Cadence Strategy).
@@ -47,7 +48,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - **Worker / OffscreenCanvas migration**: only if the render benchmark shows main-thread contention; the renderer interface must make it a transport change.
 - **Remaining UX detail**: hover tooltip (order count, age, consumed/cancelled, cost), execution-cost readout placement, replay scrubber (pause exists; replay needs fixtures).
 - **Grid change at fixed precision (price crossing a power of ten)**: covered by the synthesised `btc-grid-change` fixture; whether the server actually shifts grid under a fixed `nSigFigs` subscription is still unobserved. Resolve when a real crossing is caught, or leave the synthesised path as the contract.
-- **Implementation slicing**: the implementation slice will be too large for one session; it splits into sub-tickets once types/contracts exist.
+- **Implementation slicing**: fixed in the Implementation ticket: feed (salvage) → engine (salvage) → port v4 visuals with parity gate → chrome → tests/benches.
 - **Quick-grouping gesture**: local client-side coarsening (drag on the ladder) layered over the server precision; only after the prototype shows the dropdown alone is not enough.
 
 ## Out of scope
