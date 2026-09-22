@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import type { MarketStats, MarketSummary } from "../data/hyperliquid-info";
+import { useFocusTrap } from "./focus-trap";
 
 /**
  * The pair popover: search, Perp/Spot/favourites tabs, keyboard navigation and
@@ -42,6 +43,8 @@ export function PairPicker(props: PairPickerProps): JSX.Element {
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -87,10 +90,7 @@ export function PairPicker(props: PairPickerProps): JSX.Element {
         if (picked !== undefined) onSelect(picked.coin);
         return;
       }
-      if (e.key === "Tab") {
-        // Focus stays inside: the search field is the only tab stop while open.
-        e.preventDefault();
-      }
+      // Tab is left to the trap: every control in the popover is reachable.
     },
     [visible, cursor, onSelect, onClose],
   );
@@ -100,7 +100,14 @@ export function PairPicker(props: PairPickerProps): JSX.Element {
   });
 
   return (
-    <div className="orderbook-pairpop" role="dialog" aria-label="Select market" onKeyDown={onKeyDown}>
+    <div
+      className="orderbook-pairpop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Select market"
+      ref={rootRef}
+      onKeyDown={onKeyDown}
+    >
       <input
         ref={inputRef}
         className="orderbook-pairsearch"

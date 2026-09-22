@@ -1,6 +1,7 @@
 import type { JSX } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { Prefs } from "../state/prefs";
+import { useFocusTrap } from "./focus-trap";
 
 /**
  * The gear popover: the three settings that are preferences rather than
@@ -35,6 +36,12 @@ const NOTIONALS: ReadonlyArray<{ readonly value: Prefs["notional"]; readonly lab
  */
 export function Settings(props: SettingsProps): JSX.Element {
   const { prefs, onChange, onClose } = props;
+  const rootRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(rootRef);
+  // Opening from the gear button moves the keyboard into the panel, not past it.
+  useEffect(() => {
+    rootRef.current?.querySelector("select")?.focus();
+  }, []);
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent): void => {
       if (e.key === "Escape") {
@@ -58,7 +65,14 @@ export function Settings(props: SettingsProps): JSX.Element {
   );
 
   return (
-    <div className="orderbook-gearpop" role="dialog" aria-label="Settings" onKeyDown={onKeyDown}>
+    <div
+      className="orderbook-gearpop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Settings"
+      ref={rootRef}
+      onKeyDown={onKeyDown}
+    >
       <label>
         <span>cadence</span>
         <select value={prefs.cadence} onChange={onCadence}>
