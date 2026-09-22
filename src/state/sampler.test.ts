@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BookSnapshot } from "../data/engine-api.types";
+import type { BookSnapshot, LevelEvent } from "../data/engine-api.types";
 import type { Level } from "../data/feed-events.types";
 import * as Tick from "../domain/tick";
 import { createLevelHistory } from "./level-history";
@@ -87,11 +87,13 @@ describe("sampler", () => {
   });
 });
 
+function ev(kind: "added" | "grew", px: number, from: number, to: number): LevelEvent {
+  return { side: "bid", px: tick(px), kind, from, to, consumed: 0, cancelled: 0, stream: "fast", time: 0 };
+}
+
 describe("sampler with motion", () => {
   it("springs a row's shown size and carries pulses; animation state follows the price across a re-centre", () => {
     const s = sampler();
-    const ev = (kind: "added" | "grew", px: number, from: number, to: number) =>
-      ({ side: "bid" as const, px: tick(px), kind, from, to, consumed: 0, cancelled: 0, stream: "fast" as const, time: 0 });
     let snap = book([lvl(1000, 8)], [lvl(1010, 1)]);
     let f = s.sample({ snapshot: snap, events: [ev("added", 1000, 0, 8)], trades: [] }, geometry, 0, 0.016);
     const row0 = f?.rows.find((r) => r.px === 1000);
@@ -115,7 +117,7 @@ describe("sampler with motion", () => {
     const snap = book([lvl(1000, 1)], [lvl(1010, 1)]);
     s.sample(input(snap), geometry, 0, 0.016);
     let f = s.sample({ snapshot: snap, events: [], trades: [{ px: tick(1010), sz: 1, side: "B", time: 0 }] }, geometry, 100, 0.016);
-    expect(f?.rows.find((r) => r.px === 1010)?.pulses).toEqual([{ kind: "fill", t0: 100, amount: 0 }]);
+    expect(f?.rows.find((r) => r.px === 1010)?.pulses).toEqual([{ kind: "fill", t0: 100 }]);
     f = s.sample(input(snap), geometry, 100 + 1600, 0.016);
     expect(f?.rows.find((r) => r.px === 1010)?.pulses).toEqual([]);
   });

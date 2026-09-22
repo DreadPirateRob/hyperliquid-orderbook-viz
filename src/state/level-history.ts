@@ -93,9 +93,9 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
     }
     return e;
   };
-  const pulse = (e: Entry, kind: Pulse["kind"], t: number, amount: number): void => {
+  const pulse = (e: Entry, kind: Pulse["kind"], t: number): void => {
     if (options.reducedMotion) return;
-    e.pulses.push({ kind, t0: t, amount });
+    e.pulses.push({ kind, t0: t });
     if (e.pulses.length > PULSE_CAP) e.pulses.shift();
   };
   const setSize = (e: Entry, size: number, t: number): void => {
@@ -124,16 +124,16 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
           case "added":
             if (e.live === 0 && e.spring.x < 1e-9) e.first = t;
             setSize(e, ev.to, t);
-            pulse(e, "add", t, 0);
+            pulse(e, "add", t);
             break;
           case "grew":
             setSize(e, ev.to, t);
-            pulse(e, "grew", t, 0);
+            pulse(e, "grew", t);
             break;
           case "shrank":
           case "vanished":
             setSize(e, ev.to, t);
-            pulse(e, ev.consumed > 0 ? "fill" : "ghost", t, ev.from - ev.to);
+            pulse(e, ev.consumed > 0 ? "fill" : "ghost", t);
             break;
           case "outOfWindow":
             setSize(e, 0, t);
@@ -146,7 +146,7 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
       }
     },
     applyTrades: (trades, t) => {
-      for (const tr of trades) pulse(rec(tr.side === "B" ? "ask" : "bid", tr.px, t), "fill", t, 0);
+      for (const tr of trades) pulse(rec(tr.side === "B" ? "ask" : "bid", tr.px, t), "fill", t);
     },
     step: (t, dt) => {
       for (const [k, e] of entries) {

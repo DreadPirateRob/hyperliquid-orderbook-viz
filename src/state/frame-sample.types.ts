@@ -7,12 +7,10 @@ import type { Tick } from "../domain/tick";
  * The rendering layer draws it and nothing else (ADR 0003, 0009).
  */
 
-/** A pulse fired on a level; drawn by age against v4's decay constants. */
+/** A pulse fired on a level; drawn by age against v4's decay constants (the ghost's width comes from the row's prev − live, as in v4). */
 export type Pulse = {
   readonly kind: "fill" | "ghost" | "add" | "grew";
   readonly t0: number;
-  /** Ghost: width lost, in size units. Others: unused (0). */
-  readonly amount: number;
 };
 
 /** One ladder row, top to bottom. */

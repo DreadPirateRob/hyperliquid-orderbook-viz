@@ -114,10 +114,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     engine.apply(event);
   });
   const hostTick = setInterval(() => engine.apply({ _tag: "tick", rx: Date.now() }), HOST_TICK_MS);
-  // Returning to a hidden tab: fold what queued, then settle rather than replay minutes of motion.
+  // Returning to a hidden tab: the next frame folds what queued, then settles rather than replaying minutes of motion.
+  let snapPending = false;
   const onVisibility = (): void => {
     if (document.visibilityState !== "visible") return;
-    sampler.snap();
+    snapPending = true;
     lastT = performance.now();
   };
   document.addEventListener("visibilitychange", onVisibility);
@@ -140,6 +141,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     const events = engine.drain();
     const trades = engine.drainTrades();
     const S = scale === undefined ? undefined : sampler.sample({ snapshot, events, trades }, { height, gridTick, ruler: state.ruler }, t, dt);
+    if (snapPending) {
+      snapPending = false;
+      sampler.snap();
+    }
     if (S !== undefined && scale !== undefined) {
       drawLadder({ ctx, width, height, scale, gridTick, trailsOn: state.trailsOn, tapeOn: state.tapeOn, overlaysOn: state.overlaysOn }, S);
     }
