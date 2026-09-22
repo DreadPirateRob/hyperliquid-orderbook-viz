@@ -96,3 +96,11 @@ describe("Tick.formatOnGrid", () => {
     expect(Tick.formatOnGrid(parsed("81000.0", btc), btc, 1000)).toBe("81000");
   });
 });
+
+describe("Tick.formatMid", () => {
+  it("adds a trailing 5 only when the mid sits between ticks", () => {
+    expect(Tick.formatMid(810700, btc)).toBe("81070.0");
+    expect(Tick.formatMid(810700.5, btc)).toBe("81070.05");
+    expect(Tick.formatMid(7.5, scaleOf("perp", 6))).toBe("7.5");
+  });
+});

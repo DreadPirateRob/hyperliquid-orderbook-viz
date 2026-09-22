@@ -158,3 +158,20 @@ export function formatOnGrid(tick: Tick, scale: PriceScale, gridTick: number): s
   const trimmed = full.slice(0, cut);
   return trimmed.endsWith(".") ? trimmed.slice(0, -1) : trimmed;
 }
+
+/**
+ * Render a mid price (v4 `fmtMid`): the tick string, plus one extra digit
+ * when the mid sits halfway between ticks (`"81070.5"` on a one-decimal
+ * scale is `81070.0`/`81071.0`'s midpoint → `"81070.05"`).
+ *
+ * @param mid - Mid in raw ticks, possibly `x.5`.
+ * @param scale - The market's price scale.
+ * @returns The decimal string.
+ */
+export function formatMid(mid: number, scale: PriceScale): string {
+  const low = fromInteger(Math.floor(mid));
+  if (low._tag === "err") return "–";
+  const base = format(low.value, scale);
+  if (Math.abs(mid - Math.floor(mid)) < 1e-9) return base;
+  return `${base}${base.includes(".") ? "" : "."}5`;
+}

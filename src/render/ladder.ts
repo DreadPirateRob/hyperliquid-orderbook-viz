@@ -1,7 +1,9 @@
 import * as Tick from "../domain/tick";
 import type { FrameRow, FrameSample, Pulse } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
+import type { PriceScale } from "../domain/tick";
 import type { DrawContext } from "./draw.types";
+import type { Rgb } from "./palette";
 import { FONT, PALETTE, formatSize, rgba, sideColour, text } from "./palette";
 
 /**
@@ -15,6 +17,8 @@ const BLOCK_W = 300;
 const GUTTER_W = 170;
 const TAPE_W = 200;
 const PERSISTENCE_MS = 20000;
+const TRAIL_MS = 12000;
+const TRAIL_DT = 250;
 const RULER_DIM = 0.45;
 
 /** Column x positions (v4's `X`). */
@@ -175,6 +179,7 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
       ctx.fillStyle = "#0b0e11cc";
       ctx.fillRect(lx - 2, y + 5, tw + 4, ROW - 10);
       text(ctx, lbl, lx, cy, PALETTE.text, "left", 11);
+      trailStrip(ctx, row, X.trail, X.trailW, y, S);
     } else {
       text(ctx, formatSize(row.shown), X.size, cy, PALETTE.text, "right");
     }
@@ -184,8 +189,155 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
     ctx.fillStyle = "#ffffff18";
     ctx.fillRect(X.trail, 0, 1, CH);
     ctx.fillRect(X.trail + X.trailW, 0, 1, CH);
+    drawTouchPaths(ctx, S, X, CH, d.scale);
   }
   drawRuler(ctx, S, X, W);
+  drawBoundary(ctx, S, X, d);
+}
+
+/** v4 `trailStrip`: one tile per sample, positioned by time so the strip glides; fill dots at trade times. */
+function trailStrip(
+  ctx: CanvasRenderingContext2D,
+  row: FrameRow,
+  x0: number,
+  w: number,
+  y: number,
+  S: FrameSample,
+): void {
+  if (row.side === "spread") return;
+  const cw = (w * TRAIL_DT) / TRAIL_MS;
+  const x1 = x0 + w;
+  const sat = 0.35 + 0.65 * persistence(row, S.t);
+  for (const s of row.trail) {
+    const x = x0 + ((s.t - (S.t - TRAIL_MS)) / TRAIL_MS) * w;
+    if (x < x0) continue;
+    const rel = s.sz / S.maxSz;
+    if (rel <= 0) continue;
+    const cx0 = Math.max(x0, x);
+    const cx1 = Math.min(x1, x + Math.max(2, cw));
+    if (cx1 <= cx0) continue;
+    // dimmed so the bid/ask paths keep ≥ 3:1 contrast over tiles
+    ctx.fillStyle = rgba(rel > 0.85 ? PALETTE.hot : sideColour(row.side), (0.06 + 0.42 * rel ** 0.7) * sat);
+    ctx.fillRect(cx0, y + 3, cx1 - cx0, ROW - 6);
+  }
+  for (const p of row.pulses) {
+    if (p.kind !== "fill") continue;
+    const x = x0 + ((p.t0 - (S.t - TRAIL_MS)) / TRAIL_MS) * w;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(x, y + ROW / 2, 2.5, 0, 7);
+    ctx.fill();
+  }
+}
+
+/** y of a price by interpolating between the rows around it (v4 `yOf`). */
+function yOf(rows: ReadonlyArray<FrameRow>, px: number): number {
+  let above: FrameRow | undefined;
+  let below: FrameRow | undefined;
+  for (const r of rows) {
+    if (r.px >= px) above = r;
+    else if (below === undefined) below = r;
+  }
+  if (above !== undefined && below !== undefined) {
+    const f = (above.px - px) / (above.px - below.px);
+    return above.y + ROW / 2 + f * (below.y - above.y);
+  }
+  if (above !== undefined) return above.y + ROW / 2;
+  if (below !== undefined) return below.y + ROW / 2;
+  return -100;
+}
+
+/** Best bid / best ask paths over the trails window with price tags at the "now" edge. */
+function drawTouchPaths(
+  ctx: CanvasRenderingContext2D,
+  S: FrameSample,
+  X: LadderLayout,
+  CH: number,
+  scale: PriceScale,
+): void {
+  if (S.midTrail.length < 2) return;
+  const sides = [
+    { key: "a", c: PALETTE.ask, now: S.bestAsk, dy: -7 },
+    { key: "b", c: PALETTE.bid, now: S.bestBid, dy: 7 },
+  ] as const;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(X.trail, 0, X.trailW, CH);
+  ctx.clip();
+  for (const side of sides) {
+    ctx.beginPath();
+    S.midTrail.forEach((s, i) => {
+      const x = X.trail + ((s.t - (S.t - TRAIL_MS)) / TRAIL_MS) * X.trailW;
+      const yy = yOf(S.rows, s[side.key]);
+      if (i === 0) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    });
+    ctx.lineTo(X.trail + X.trailW, yOf(S.rows, side.now));
+    ctx.strokeStyle = rgba(side.c, 0.22);
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.strokeStyle = rgba(side.c, 0.95);
+    ctx.lineWidth = 1.25;
+    ctx.stroke();
+  }
+  ctx.restore();
+  for (const side of sides) {
+    const yy = yOf(S.rows, side.now);
+    const lbl = Tick.format(side.now, scale);
+    ctx.font = `600 9px ${FONT}`;
+    const tw = ctx.measureText(lbl).width + 6;
+    ctx.fillStyle = rgba(side.c, 0.95);
+    roundRect(ctx, X.trail + X.trailW - tw - 2, yy + side.dy - 6, tw, 12, 2);
+    ctx.fill();
+    text(ctx, lbl, X.trail + X.trailW - 5, yy + side.dy, PALETTE.bg, "right", 9, true);
+  }
+}
+
+/** v4 `ribbon1`: 1 px boundary line, last-trade tag on the price column, stacked share bar in the gutter. */
+function drawBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayout, d: DrawContext): void {
+  const y = S.ribY;
+  ctx.fillStyle = rgba(PALETTE.mid, 0.7);
+  ctx.fillRect(0, y - 0.5, X.ladderW, 1);
+  const last = S.lastTrade;
+  const lastPx = last?.px ?? S.mid;
+  const row = S.rows.find((r) => Math.abs(r.px - lastPx) < d.gridTick / 2 + 1e-9);
+  const ty = row === undefined ? y : row.y + ROW / 2;
+  const lc: Rgb =
+    last === undefined ? PALETTE.mid : last.dir > 0 ? PALETTE.bid : last.dir < 0 ? PALETTE.ask : [200, 200, 200];
+  const lbl =
+    last === undefined
+      ? Tick.formatMid(S.mid, d.scale)
+      : `${last.dir > 0 ? "▲ " : last.dir < 0 ? "▼ " : ""}${Tick.format(last.px, d.scale)}`;
+  ctx.font = `600 12px ${FONT}`;
+  const tw = ctx.measureText(lbl).width + 10;
+  ctx.fillStyle = rgba(lc, 0.95);
+  roundRect(ctx, X.px - tw + 4, ty - 9, tw, 18, 3);
+  ctx.fill();
+  text(ctx, lbl, X.px - 1, ty, PALETTE.bg, "right", 12, true);
+  // stacked share bar: ask part above the boundary, bid part below (height ∝ share), sizes beside
+  const bx = X.block + X.blockW + 34;
+  const bw = 10;
+  const H = 44;
+  const hb = S.share * H;
+  const ha = H - hb;
+  ctx.fillStyle = rgba(PALETTE.ask, 0.8);
+  ctx.fillRect(bx, y - ha, bw, ha);
+  ctx.fillStyle = rgba(PALETTE.bid, 0.8);
+  ctx.fillRect(bx, y, bw, hb);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(bx - 2, y - 1, bw + 4, 2);
+  text(ctx, formatSize(S.bestAskSz), bx + bw + 6, y - ha / 2, rgba(PALETTE.ask, 1), "left", 10, true);
+  text(ctx, formatSize(S.bestBidSz), bx + bw + 6, y + hb / 2, rgba(PALETTE.bid, 1), "left", 10, true);
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 /** Stepped cumulative profile behind the block column, per side. */

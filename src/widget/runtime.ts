@@ -166,7 +166,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       lastStatus = t;
       options.onStatus({
         connection: snapshot.connection,
-        mid: S === undefined || scale === undefined ? "–" : formatMid(S.mid, scale),
+        mid: S === undefined || scale === undefined ? "–" : Tick.formatMid(S.mid, scale),
         coin: market?.coin ?? "–",
         groupLabel,
       });
@@ -187,18 +187,4 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       stopFeed();
     },
   };
-}
-
-/** v4 `fmtMid`: one extra decimal when the mid sits between ticks. */
-function formatMid(mid: number, scale: PriceScale): string {
-  const whole = Math.round(mid);
-  const r = Tick.fromInteger(whole);
-  if (r._tag === "err") return "–";
-  const base = Tick.format(r.value, scale);
-  if (Math.abs(mid - whole) < 1e-9) return base;
-  const halfDigit = Math.round((mid - Math.floor(mid)) * 10);
-  const low = Tick.fromInteger(Math.floor(mid));
-  if (low._tag === "err") return base;
-  const lowText = Tick.format(low.value, scale);
-  return `${lowText}${lowText.includes(".") ? "" : "."}${halfDigit}`;
 }
