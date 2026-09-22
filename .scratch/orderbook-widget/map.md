@@ -47,7 +47,8 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - [Tickets](issues/12-tickets.md): eleven vertical tracer bullets (18 scaffold → 19 ladder rows → 20 motion → trails/tape/spine → overlays; grouping, pairs; responsive; proof), parity gate per visual slice, atomic commits per step.
 - [Scaffold and contracts](issues/18-scaffold.md): stack + strict TS, `Tick` domain module (exact parser, property-tested), Result/tagged errors, seam types for feed events / engine / frame sample / draw, empty `<OrderBook>` mounted.
 
-- File naming: type-only modules are `<name>.types.ts`, tests `<name>.test.ts`, generators `<name>.arbitrary.ts`; a bare `<name>.ts`/`.tsx` always carries runtime code.
+- File naming: type-only modules are `<name>.types.ts`, tests `<name>.test.ts`, generators `<name>.arbitrary.ts`; a bare `<name>.ts`/`.tsx` always carries runtime code.- [Ladder rows on screen](issues/19-ladder-rows.md): tracer bullet socket/fixture → engine → sampler → static ladder → React canvas; parity gate passed; ADR 0007 amended (window from the touch).
+
 ## Not yet specified
 
 - **Flow histograms** (1h/4h/1d buy vs sell): needs minutes of accumulated trades and a time axis; revisit once the trades pipeline exists.
