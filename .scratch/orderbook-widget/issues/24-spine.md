@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 20
 
 - [ ] Layout test for spine geometry
