@@ -193,10 +193,12 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         </span>
       </div>
       <canvas className="orderbook-canvas" ref={canvasRef} role="img" aria-label={`${coin} order book ladder`} />
-      <div className="orderbook-hud" hidden={!metricsOn}>
-        <pre ref={hudRef} />
-        <canvas ref={shapeRef} width={240} height={90} aria-hidden="true" />
-      </div>
+      {metricsOn ? (
+        <div className="orderbook-hud">
+          <pre ref={hudRef} />
+          <canvas ref={shapeRef} width={240} height={90} aria-hidden="true" />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -103,6 +103,7 @@ body,
   border-color: #ffffff55;
 }
 
+/* A `display` rule would beat the UA's [hidden] default, so the HUD is mounted only while metrics are on. */
 .orderbook-hud {
   position: absolute;
   top: 56px;

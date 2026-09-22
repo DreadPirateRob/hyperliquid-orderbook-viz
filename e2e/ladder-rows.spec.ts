@@ -79,3 +79,13 @@ test("overlays and metrics toggle from the keyboard and survive in the URL", asy
   await page.keyboard.press("o");
   await expect(page).not.toHaveURL(/ovl=0/);
 });
+
+test("the metrics panel is absent until asked for and leaves nothing behind", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  await expect(page.locator(".orderbook")).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+  await expect(page.locator(".orderbook-hud")).toHaveCount(0);
+  await page.keyboard.press("m");
+  await expect(page.locator(".orderbook-hud")).toBeVisible();
+  await page.keyboard.press("m");
+  await expect(page.locator(".orderbook-hud")).toHaveCount(0);
+});
