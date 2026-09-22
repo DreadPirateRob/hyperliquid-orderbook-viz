@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { GroupOption } from "../domain/grouping";
 import type { FeedSource } from "../data/feed-events.types";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
 import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
@@ -17,14 +18,24 @@ export type OrderBookProps = {
   readonly tape?: boolean;
   /** Metric overlays on at mount; default on. */
   readonly overlays?: boolean;
+  /** Grouping step in raw ticks at mount; omitted follows the market's default. */
+  readonly gridTick?: number;
   /** View at mount; default `"ladder"`. */
   readonly view?: View;
   /** Reports every user-driven state change so an embedder can mirror it (URL, storage). */
   readonly onStateChange?: (state: WidgetState) => void;
 };
 
+/** Grouping options and the one in use, mirrored from the runtime for the segment. */
+type GroupSummary = {
+  readonly options: ReadonlyArray<GroupOption>;
+  readonly active: number | undefined;
+};
+
 /** The user-facing toggles the widget owns. */
 export type WidgetState = {
+  /** Chosen grouping step in raw ticks, or `undefined` while following the default. */
+  readonly gridTick: number | undefined;
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
   readonly overlaysOn: boolean;
@@ -33,6 +44,7 @@ export type WidgetState = {
 
 const BASE_STATE: RuntimeState = {
   view: "ladder",
+  gridTick: undefined,
   notional: 100_000,
   trailsOn: true,
   tapeOn: true,
@@ -65,6 +77,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const [overlaysOn, setOverlaysOn] = useState(props.overlays ?? true);
   const [metricsOn, setMetricsOn] = useState(false);
   const [view, setView] = useState<View>(props.view ?? "ladder");
+  const [gridTick, setGridTick] = useState<number | undefined>(props.gridTick);
+  const [groups, setGroups] = useState<GroupSummary>({ options: [], active: undefined });
   const feedProp = props.feed;
   const coin = props.coin;
   const onStateChange = props.onStateChange;
@@ -72,9 +86,9 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   // User-driven changes notify the embedder from the handler itself, not from an effect.
   const report = useCallback(
     (next: Partial<WidgetState>): void => {
-      onStateChange?.({ trailsOn, tapeOn, overlaysOn, view, ...next });
+      onStateChange?.({ trailsOn, tapeOn, overlaysOn, view, gridTick, ...next });
     },
-    [onStateChange, trailsOn, tapeOn, overlaysOn, view],
+    [onStateChange, trailsOn, tapeOn, overlaysOn, view, gridTick],
   );
   const toggleTrails = useCallback(() => {
     setTrailsOn((on) => {
@@ -102,6 +116,23 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     });
   }, [report]);
   const toggleMetrics = useCallback(() => setMetricsOn((on) => !on), []);
+  const selectGroup = useCallback(
+    (step: number): void => {
+      setGridTick(step);
+      report({ gridTick: step });
+    },
+    [report],
+  );
+  /** `[` and `]` walk the option list from the one in use (v4). */
+  const stepGroup = useCallback(
+    (direction: -1 | 1): void => {
+      const list = groups.options;
+      const index = list.findIndex((o) => o.gridTick === groups.active);
+      const next = list[Math.min(list.length - 1, Math.max(0, (index < 0 ? 0 : index) + direction))];
+      if (next !== undefined) selectGroup(next.gridTick);
+    },
+    [groups, selectGroup],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -123,6 +154,11 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       }
       if (rootRef.current !== null) rootRef.current.dataset["connection"] = s.connection;
       if (hudRef.current !== null && s.hud !== "") hudRef.current.textContent = s.hud;
+      setGroups((prev) =>
+        prev.active === s.gridTick && prev.options === s.groupOptions
+          ? prev
+          : { options: s.groupOptions, active: s.gridTick },
+      );
     };
     // Seeded with the base state; the sync effect below pushes the current toggles right after mount.
     const runtime = createRuntime({ canvas, feed, state: BASE_STATE, onStatus });
@@ -134,8 +170,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   }, [feedProp, coin]);
 
   useEffect(() => {
-    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn, overlaysOn, metricsOn, view });
-  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view]);
+    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick });
+  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -145,10 +181,12 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       if (e.key === "v") toggleView();
       if (e.key === "o") toggleOverlays();
       if (e.key === "m") toggleMetrics();
+      if (e.key === "[") stepGroup(-1);
+      if (e.key === "]") stepGroup(1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleTrails, toggleTape, toggleView, toggleOverlays, toggleMetrics]);
+  }, [toggleTrails, toggleTape, toggleView, toggleOverlays, toggleMetrics, stepGroup]);
 
   return (
     <div
@@ -169,6 +207,11 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         </span>
         <span className="orderbook-group" ref={groupRef}>
           –
+        </span>
+        <span className="orderbook-groupseg" role="group" aria-label="grouping">
+          {groups.options.map((o) => (
+            <GroupButton key={o.gridTick} option={o} active={o.gridTick === groups.active} onSelect={selectGroup} />
+          ))}
         </span>
         <button type="button" className="orderbook-toggle" aria-pressed={view === "spine"} onClick={toggleView}>
           {view}
@@ -196,5 +239,20 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** One grouping step in the segmented control; its own component so the list does not rebuild callbacks. */
+function GroupButton(props: {
+  readonly option: GroupOption;
+  readonly active: boolean;
+  readonly onSelect: (gridTick: number) => void;
+}): JSX.Element {
+  const { option, onSelect } = props;
+  const onClick = useCallback(() => onSelect(option.gridTick), [onSelect, option.gridTick]);
+  return (
+    <button type="button" className="orderbook-group-option" aria-pressed={props.active} onClick={onClick}>
+      {option.label}
+    </button>
   );
 }

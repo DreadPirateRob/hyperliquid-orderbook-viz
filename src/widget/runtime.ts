@@ -2,6 +2,7 @@ import type { Engine } from "../data/engine-api.types";
 import { createEngine } from "../data/engine";
 import type { FeedSource, MarketInfo } from "../data/feed-events.types";
 import * as Grouping from "../domain/grouping";
+import type { GroupOption } from "../domain/grouping";
 import type { PriceScale } from "../domain/tick";
 import * as Tick from "../domain/tick";
 import { drawLadder } from "../render/ladder";
@@ -13,6 +14,7 @@ import { createTape } from "../state/tape";
 import { hudText } from "./hud";
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
+import type { FrameSample } from "../state/frame-sample.types";
 import type { ConnectionState } from "../data/engine-api.types";
 
 /**
@@ -30,6 +32,8 @@ export type View = "ladder" | "spine";
 /** What the runtime reads from widget state each frame. */
 export type RuntimeState = {
   readonly view: View;
+  /** Chosen grouping step in raw ticks; `undefined` follows the market's default. */
+  readonly gridTick: number | undefined;
   /** Execution-cost notional in quote units. */
   readonly notional: number;
   readonly trailsOn: boolean;
@@ -50,6 +54,10 @@ export type RuntimeStatus = {
   readonly groupLabel: string;
   /** Metrics HUD text; empty when metrics are off. */
   readonly hud: string;
+  /** Grouping options for the current market, coarse to fine. */
+  readonly groupOptions: ReadonlyArray<GroupOption>;
+  /** Row step in raw ticks currently in use. */
+  readonly gridTick: number;
 };
 
 /** Host inputs. */
@@ -71,6 +79,9 @@ export type Runtime = {
 const HOST_TICK_MS = 500;
 const STATUS_MS = 500;
 const FPS30_CAP_MS = 1000 / 30 - 1;
+/** A resync dims the frozen ladder to this over this long, then the new grid fades in. */
+const RESYNC_DIM = 0.35;
+const RESYNC_FADE_MS = 400;
 
 /**
  * Start a runtime on a canvas.
@@ -87,6 +98,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let scale: PriceScale | undefined;
   let gridTick = 1;
   let groupLabel = "–";
+  let groupOptions: ReadonlyArray<GroupOption> = [];
   const engine: Engine = createEngine({ gridTick, scale: undefined });
   const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   const reducedMotion = (): boolean => reducedMotionQuery.matches;
@@ -104,6 +116,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let drawn = 0;
   let fpsSince = performance.now();
   let fps = 0;
+  let resyncSince: number | undefined;
+  let lastFrame: FrameSample | undefined;
   let raf = 0;
   let disposed = false;
 
@@ -126,11 +140,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     if (event._tag === "market") {
       scale = event.market.scale;
       gridTick = Grouping.gridTickFor(event.market.mark, event.market.precision, scale);
-      groupLabel = Grouping.deriveOptions(event.market.mark, scale).find((o) => o.gridTick === gridTick)?.label ?? "–";
+      groupOptions = Grouping.deriveOptions(event.market.mark, scale);
+      groupLabel = groupOptions.find((o) => o.gridTick === gridTick)?.label ?? "–";
       const sameCoin = market?.coin === event.market.coin;
       market = event.market;
       engine.reset({ gridTick, scale });
       sampler.reset(sameCoin ? "grid" : "coin");
+      if (!sameCoin) lastFrame = undefined;
       return;
     }
     if (state.paused && event._tag !== "connection" && event._tag !== "tick") return;
@@ -164,9 +180,14 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     const events = engine.drain();
     const trades = engine.drainTrades();
     const migrations = engine.drainMigrations();
+    // Grouping change: the old ladder freezes and dims, then the first post-ack
+    // frame fades in, so rows from two grids are never mixed (spec, story 37).
+    const resyncing = snapshot.connection === "RESYNCING";
+    if (resyncing) resyncSince = resyncSince ?? t;
+    else if (resyncSince !== undefined && snapshot.bids.length > 0) resyncSince = undefined;
     const settle = snapPending;
     snapPending = false;
-    const S =
+    const fresh =
       scale === undefined
         ? undefined
         : sampler.sample(
@@ -175,7 +196,12 @@ export function createRuntime(options: RuntimeOptions): Runtime {
             t,
             dt,
           );
+    // While resyncing, keep painting the frozen frame dimmed rather than an empty ladder.
+    const S = resyncing ? (fresh ?? lastFrame) : fresh;
+    const fade = resyncSince === undefined ? 1 : Math.max(RESYNC_DIM, 1 - (t - resyncSince) / RESYNC_FADE_MS);
+    ctx.globalAlpha = resyncing ? fade : 1;
     if (S !== undefined && scale !== undefined) {
+      lastFrame = S;
       const draw = {
         ctx,
         width,
@@ -192,6 +218,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       else drawLadder(draw, S);
       if (draw.tapeOn) drawTape(draw, S);
     }
+    ctx.globalAlpha = 1;
     const frameMs = performance.now() - t;
     frames.push(frameMs);
     if (frames.length > 120) frames.shift();
@@ -209,6 +236,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         mid: S === undefined || scale === undefined ? "–" : Tick.formatMid(S.mid, scale),
         coin: market?.coin ?? "–",
         groupLabel,
+        groupOptions,
+        gridTick,
         hud: state.metricsOn
           ? hudText({
               coin: market?.coin ?? "–",
@@ -228,6 +257,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
 
   return {
     update: (next) => {
+      const wanted = next.gridTick;
+      if (wanted !== undefined && wanted !== gridTick && market !== undefined) {
+        const option = groupOptions.find((o) => o.gridTick === wanted);
+        if (option !== undefined) options.feed.select(market.coin, option.precision);
+      }
       state = next;
     },
     dispose: () => {
