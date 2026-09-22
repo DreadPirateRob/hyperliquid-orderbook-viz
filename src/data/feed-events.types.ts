@@ -1,4 +1,5 @@
 import type { Precision } from "../domain/grouping";
+import type { PriceScale } from "../domain/tick";
 import type { Tick } from "../domain/tick";
 
 /**
@@ -44,11 +45,22 @@ export type ConnectionEvent =
   | { readonly _tag: "closed"; readonly reason: string }
   | { readonly _tag: "rejected"; readonly line: string; readonly why: string };
 
+/** What the adapter learned about the market before subscribing. */
+export type MarketInfo = {
+  readonly coin: string;
+  readonly scale: PriceScale;
+  readonly precision: Precision;
+  /** Reference price used to derive the grid, in quote units. */
+  readonly mark: number;
+};
+
 /**
- * Everything an adapter can emit. `tick` is the host clock: the engine never
- * reads time itself (ADR 0003), so staleness is detected on ticks.
+ * Everything an adapter can emit. `market` comes first on every (re)start;
+ * `tick` is the host clock: the engine never reads time itself (ADR 0003),
+ * so staleness is detected on ticks.
  */
 export type FeedEvent =
+  | { readonly _tag: "market"; readonly market: MarketInfo; readonly rx: number }
   | { readonly _tag: "l2Book"; readonly stream: DepthStream; readonly bids: ReadonlyArray<Level>; readonly asks: ReadonlyArray<Level>; readonly time: number; readonly rx: number }
   | { readonly _tag: "bbo"; readonly bid: Level | undefined; readonly ask: Level | undefined; readonly time: number; readonly rx: number }
   | { readonly _tag: "trades"; readonly trades: ReadonlyArray<Trade>; readonly historical: boolean; readonly rx: number }

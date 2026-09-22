@@ -71,6 +71,7 @@ class BookEngine implements Engine {
         if (event.trades.length > 0) this.bump();
         return;
       case "ack":
+      case "market":
         return;
       case "connection":
         switch (event.event._tag) {
