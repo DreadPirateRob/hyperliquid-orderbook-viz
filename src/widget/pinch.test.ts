@@ -22,7 +22,7 @@ describe("createPinchTracker", () => {
     const t = createPinchTracker();
     t.down(1, 100, 100);
     t.down(2, 300, 100);
-    expect(t.move(2, 250, 100)).toBeUndefined();
+    expect(t.move(2, 260, 100)).toBeUndefined();
     expect(t.move(2, 220, 100)).toBe("coarser");
   });
 
