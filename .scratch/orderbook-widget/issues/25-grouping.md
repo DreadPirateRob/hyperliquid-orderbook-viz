@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 19
 
 - [ ] Adapter test on the precision-swap recording: ack sequencing, in-flight old pushes dropped
