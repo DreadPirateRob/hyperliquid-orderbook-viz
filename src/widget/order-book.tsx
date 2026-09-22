@@ -1,13 +1,15 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { Pause, Play, Settings as SettingsIcon } from "lucide-react";
 import type { GroupOption } from "../domain/grouping";
 import type { FeedSource } from "../data/feed-events.types";
 import type { Fetch, MarketStats, MarketSummary } from "../data/hyperliquid-info";
 import { fetchStats, fetchUniverse } from "../data/hyperliquid-info";
 import { createInfoFetch } from "../data/info-cache";
-import type { PrefsStore } from "../state/prefs";
+import type { Prefs, PrefsStore } from "../state/prefs";
+import { DEFAULT_PREFS } from "../state/prefs";
 import { PairPicker } from "./pair-picker";
+import { Settings } from "./settings";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
 import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
 import { createRuntime } from "./runtime";
@@ -87,7 +89,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
   const [tapeOn, setTapeOn] = useState(props.tape ?? true);
   const [overlaysOn, setOverlaysOn] = useState(props.overlays ?? true);
-  const [metricsOn, setMetricsOn] = useState(false);
+  const [metricsOn, setMetricsOn] = useState(props.prefs?.get().metricsOn ?? false);
   const [view, setView] = useState<View>(props.view ?? "ladder");
   const [gridTick, setGridTick] = useState<number | undefined>(props.gridTick);
   const [groups, setGroups] = useState<GroupSummary>({ options: [], active: undefined });
@@ -97,6 +99,9 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const [markets, setMarkets] = useState<ReadonlyArray<MarketSummary>>([]);
   const [stats, setStats] = useState<Record<string, MarketStats>>({});
   const [favourites, setFavourites] = useState<ReadonlyArray<string>>(props.prefs?.get().favourites ?? []);
+  const [gearOpen, setGearOpen] = useState(false);
+  const [settings, setSettings] = useState<Prefs>(props.prefs?.get() ?? DEFAULT_PREFS);
+  const gearButtonRef = useRef<HTMLButtonElement>(null);
   const pairButtonRef = useRef<HTMLButtonElement>(null);
   const feedProp = props.feed;
   const prefs = props.prefs;
@@ -144,6 +149,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     });
   }, [prefs]);
   const togglePause = useCallback(() => setPaused((p) => !p), []);
+  const toggleGear = useCallback(() => setGearOpen((open) => !open), []);
+  const closeGear = useCallback(() => {
+    setGearOpen(false);
+    gearButtonRef.current?.focus();
+  }, []);
+  const changeSettings = useCallback(
+    (patch: Partial<Prefs>): void => {
+      prefs?.set(patch);
+      setSettings(prefs?.get() ?? { ...settings, ...patch });
+    },
+    [prefs, settings],
+  );
   const openPicker = useCallback(() => setPickerOpen(true), []);
   const closePicker = useCallback(() => {
     setPickerOpen(false);
@@ -235,7 +252,6 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   }, [feedProp, coin, fetchFn]);
 
   useEffect(() => {
-    const p = prefs?.get();
     runtimeRef.current?.update({
       ...BASE_STATE,
       trailsOn,
@@ -245,9 +261,11 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       view,
       gridTick,
       paused,
-      ...(p === undefined ? {} : { cadence: p.cadence, ruler: p.ruler, notional: p.notional }),
+      cadence: settings.cadence,
+      ruler: settings.ruler,
+      notional: settings.notional,
     });
-  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick, paused, prefs]);
+  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick, paused, settings]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -262,6 +280,10 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       if (e.key === "/") {
         e.preventDefault();
         openPicker();
+      }
+      if (e.key === "Escape") {
+        setGearOpen(false);
+        setPickerOpen(false);
       }
       if (e.key === " ") {
         e.preventDefault();
@@ -339,6 +361,17 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
           CONNECTING
         </span>
+        <button
+          type="button"
+          className="orderbook-toggle orderbook-icon"
+          ref={gearButtonRef}
+          aria-pressed={gearOpen}
+          aria-label="Settings"
+          aria-haspopup="dialog"
+          onClick={toggleGear}
+        >
+          <SettingsIcon size={12} aria-hidden />
+        </button>
       </div>
       {pickerOpen ? (
         <PairPicker
@@ -351,6 +384,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
           onClose={closePicker}
         />
       ) : null}
+      {gearOpen ? <Settings prefs={settings} onChange={changeSettings} onClose={closeGear} /> : null}
       <canvas className="orderbook-canvas" ref={canvasRef} role="img" aria-label={`${coin} order book ladder`} />
       {metricsOn ? (
         <div className="orderbook-hud">

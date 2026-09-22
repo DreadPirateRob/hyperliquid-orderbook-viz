@@ -147,3 +147,25 @@ test("a shared link's grouping survives the load", async ({ page }) => {
   await expect(page.locator(".orderbook-group")).toHaveText("$5", { timeout: 20_000 });
   await expect(page).toHaveURL(/g=50/);
 });
+
+test("settings persist across a reload and drive the render cadence", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  await expect(page.locator(".orderbook")).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+  await page.getByLabel("Settings").click();
+  const gear = page.getByRole("dialog", { name: "Settings" });
+  await expect(gear).toBeVisible();
+
+  await gear.getByRole("combobox").first().selectOption("30");
+  await gear.getByRole("slider").fill("20");
+  await gear.getByRole("combobox").last().selectOption("1000000");
+  await page.keyboard.press("Escape");
+  await expect(gear).toHaveCount(0);
+
+  await page.keyboard.press("m");
+  await expect(page.locator(".orderbook-hud pre")).toContainText("COST $1M", { timeout: 5000 });
+  await expect(page.locator(".orderbook-hud pre")).toContainText(/RENDER\s+3\d\.\d fps/, { timeout: 5000 });
+
+  await page.reload();
+  await page.getByLabel("Settings").click();
+  await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("slider")).toHaveValue("20");
+});

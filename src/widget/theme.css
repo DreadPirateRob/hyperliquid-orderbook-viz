@@ -256,3 +256,45 @@ body,
   color: var(--dim);
   margin: 4px;
 }
+
+.orderbook-icon {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 6px;
+}
+
+.orderbook-gearpop {
+  position: absolute;
+  top: 48px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: #0f1319f2;
+  border: 1px solid #ffffff1a;
+  border-radius: 6px;
+  z-index: 2;
+}
+
+.orderbook-gearpop label {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  color: var(--dim);
+}
+
+.orderbook-gearpop select,
+.orderbook-gearpop input {
+  background: #0b0e11;
+  border: 1px solid #ffffff22;
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  padding: 2px 4px;
+}
+
+.orderbook-gearpop output {
+  color: var(--text);
+}
