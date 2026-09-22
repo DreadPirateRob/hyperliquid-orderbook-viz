@@ -86,3 +86,37 @@ describe("sampler", () => {
     expect(f?.micro).toBeCloseTo(1004 + (1 / 3) * 2);
   });
 });
+
+describe("sampler with motion", () => {
+  it("springs a row's shown size and carries pulses; animation state follows the price across a re-centre", () => {
+    const s = sampler();
+    const ev = (kind: "added" | "grew", px: number, from: number, to: number) =>
+      ({ side: "bid" as const, px: tick(px), kind, from, to, consumed: 0, cancelled: 0, stream: "fast" as const, time: 0 });
+    let snap = book([lvl(1000, 8)], [lvl(1010, 1)]);
+    let f = s.sample({ snapshot: snap, events: [ev("added", 1000, 0, 8)], trades: [] }, geometry, 0, 0.016);
+    const row0 = f?.rows.find((r) => r.px === 1000);
+    expect(row0?.shown).toBeLessThan(1);
+    expect(row0?.live).toBe(8);
+    expect(row0?.pulses.map((p) => p.kind)).toEqual(["add"]);
+    for (let i = 1; i <= 120; i++) f = s.sample(input(snap), geometry, i * 16, 0.016);
+    expect(f?.rows.find((r) => r.px === 1000)?.shown).toBe(8);
+    // mid jumps 30 ticks: the anchor retargets; the level's state is looked up by price, not by row index
+    snap = book([lvl(1030, 8), lvl(1000, 8)], [lvl(1040, 1)]);
+    f = s.sample({ snapshot: snap, events: [ev("added", 1030, 0, 8)], trades: [] }, geometry, 2000, 0.016);
+    for (let i = 1; i <= 600; i++) f = s.sample(input(snap), geometry, 2000 + i * 16, 0.016);
+    const moved = f?.rows.find((r) => r.px === 1000);
+    expect(moved?.shown).toBe(8);
+    expect(moved?.first).toBe(0);
+    expect(f?.rows.find((r) => r.px === 1030)?.first).toBe(2000);
+  });
+
+  it("fills come from trades and fade with v4's 500 ms decay", () => {
+    const s = sampler();
+    const snap = book([lvl(1000, 1)], [lvl(1010, 1)]);
+    s.sample(input(snap), geometry, 0, 0.016);
+    let f = s.sample({ snapshot: snap, events: [], trades: [{ px: tick(1010), sz: 1, side: "B", time: 0 }] }, geometry, 100, 0.016);
+    expect(f?.rows.find((r) => r.px === 1010)?.pulses).toEqual([{ kind: "fill", t0: 100, amount: 0 }]);
+    f = s.sample(input(snap), geometry, 100 + 1600, 0.016);
+    expect(f?.rows.find((r) => r.px === 1010)?.pulses).toEqual([]);
+  });
+});
