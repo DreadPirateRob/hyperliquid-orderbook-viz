@@ -2,7 +2,7 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedSource } from "../data/feed-events.types";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
-import type { Runtime, RuntimeState, RuntimeStatus } from "./runtime";
+import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
 import { createRuntime } from "./runtime";
 
 /** Props seed the initial state only (ADR 0008); later changes are reported, not applied. */
@@ -15,6 +15,8 @@ export type OrderBookProps = {
   readonly trails?: boolean;
   /** Tape column on at mount; default on. */
   readonly tape?: boolean;
+  /** View at mount; default `"ladder"`. */
+  readonly view?: View;
   /** Reports every user-driven state change so an embedder can mirror it (URL, storage). */
   readonly onStateChange?: (state: WidgetState) => void;
 };
@@ -23,9 +25,11 @@ export type OrderBookProps = {
 export type WidgetState = {
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
+  readonly view: View;
 };
 
 const BASE_STATE: RuntimeState = {
+  view: "ladder",
   trailsOn: true,
   tapeOn: true,
   overlaysOn: true,
@@ -50,22 +54,30 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const runtimeRef = useRef<Runtime | null>(null);
   const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
   const [tapeOn, setTapeOn] = useState(props.tape ?? true);
+  const [view, setView] = useState<View>(props.view ?? "ladder");
   const feedProp = props.feed;
   const coin = props.coin;
   const onStateChange = props.onStateChange;
   // User-driven changes notify the embedder from the handler itself, not from an effect.
   const toggleTrails = useCallback(() => {
     setTrailsOn((on) => {
-      onStateChange?.({ trailsOn: !on, tapeOn });
+      onStateChange?.({ trailsOn: !on, tapeOn, view });
       return !on;
     });
-  }, [onStateChange, tapeOn]);
+  }, [onStateChange, tapeOn, view]);
   const toggleTape = useCallback(() => {
     setTapeOn((on) => {
-      onStateChange?.({ trailsOn, tapeOn: !on });
+      onStateChange?.({ trailsOn, tapeOn: !on, view });
       return !on;
     });
-  }, [onStateChange, trailsOn]);
+  }, [onStateChange, trailsOn, view]);
+  const toggleView = useCallback(() => {
+    setView((v) => {
+      const next = v === "ladder" ? "spine" : "ladder";
+      onStateChange?.({ trailsOn, tapeOn, view: next });
+      return next;
+    });
+  }, [onStateChange, trailsOn, tapeOn]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -97,18 +109,19 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   }, [feedProp, coin]);
 
   useEffect(() => {
-    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn });
-  }, [trailsOn, tapeOn]);
+    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn, view });
+  }, [trailsOn, tapeOn, view]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
       if (e.key === "t") toggleTrails();
       if (e.key === "p") toggleTape();
+      if (e.key === "v") toggleView();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleTrails, toggleTape]);
+  }, [toggleTrails, toggleTape, toggleView]);
 
   return (
     <div
@@ -118,6 +131,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       data-feed={feedProp === undefined ? "live" : "injected"}
       data-trails={trailsOn ? "1" : "0"}
       data-tape={tapeOn ? "1" : "0"}
+      data-view={view}
     >
       <div className="orderbook-bar">
         <span className="orderbook-pair">{coin}</span>

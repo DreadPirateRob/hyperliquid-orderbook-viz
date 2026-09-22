@@ -396,7 +396,13 @@ function drawRuler(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayou
   }
 }
 
-/** v4 `isRound`: multiples of ten grid steps are emphasised. */
-function isRound(px: number, gridTick: number): boolean {
+/**
+ * v4 `isRound`: multiples of ten grid steps are emphasised.
+ *
+ * @param px - Row price in raw ticks.
+ * @param gridTick - Row step in raw ticks.
+ * @returns True when the price is a round number on this grid.
+ */
+export function isRound(px: number, gridTick: number): boolean {
   return px % (gridTick * 10) === 0;
 }

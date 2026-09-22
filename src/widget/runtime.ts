@@ -5,6 +5,7 @@ import * as Grouping from "../domain/grouping";
 import type { PriceScale } from "../domain/tick";
 import * as Tick from "../domain/tick";
 import { drawLadder } from "../render/ladder";
+import { drawSpine } from "../render/spine";
 import { drawTape } from "../render/tape";
 import { PALETTE } from "../render/palette";
 import { createLevelHistory } from "../state/level-history";
@@ -22,8 +23,12 @@ import type { ConnectionState } from "../data/engine-api.types";
 /** Frame cadence (v4's `fpsMode`). */
 export type Cadence = "60" | "30" | "update";
 
+/** Which ladder construction is drawn. */
+export type View = "ladder" | "spine";
+
 /** What the runtime reads from widget state each frame. */
 export type RuntimeState = {
+  readonly view: View;
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
   readonly overlaysOn: boolean;
@@ -157,12 +162,15 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         height,
         scale,
         gridTick,
-        trailsOn: state.trailsOn,
-        tapeOn: state.tapeOn,
+        // The spine reads narrow: no trails, no tape, so it also reclaims their columns.
+        trailsOn: state.trailsOn && state.view === "ladder",
+        tapeOn: state.tapeOn && state.view === "ladder",
         overlaysOn: state.overlaysOn,
       };
-      drawLadder(draw, S);
-      if (state.tapeOn) drawTape(draw, S);
+      // The spine is the narrow reading: no trails, no tape (spec, story 7).
+      if (state.view === "spine") drawSpine(draw, S);
+      else drawLadder(draw, S);
+      if (draw.tapeOn) drawTape(draw, S);
     }
     if (t - lastStatus > STATUS_MS) {
       lastStatus = t;
