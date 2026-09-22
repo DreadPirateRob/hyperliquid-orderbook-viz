@@ -2,7 +2,9 @@
   "compilerOptions": {
     "target": "ES2023",
     "lib": [
-      "ES2023"
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
     ],
     "module": "ESNext",
     "moduleResolution": "bundler",
@@ -22,8 +24,6 @@
     ]
   },
   "include": [
-    "vite.config.ts",
-    "vitest.config.ts",
-    "playwright.config.ts"
+    "e2e"
   ]
 }
