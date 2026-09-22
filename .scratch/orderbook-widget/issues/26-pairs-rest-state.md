@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 19
 
 - [ ] REST adapter parses `meta/spotMeta/metaAndAssetCtxs/allMids` into domain types, skipping malformed spot rows
