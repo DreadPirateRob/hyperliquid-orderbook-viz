@@ -18,6 +18,8 @@ function syncUrl(state: WidgetState): void {
   else url.searchParams.set("trails", "0");
   if (state.tapeOn) url.searchParams.delete("tape");
   else url.searchParams.set("tape", "0");
+  if (state.overlaysOn) url.searchParams.delete("ovl");
+  else url.searchParams.set("ovl", "0");
   if (state.view === "ladder") url.searchParams.delete("view");
   else url.searchParams.set("view", state.view);
   history.replaceState(null, "", url);
@@ -46,6 +48,7 @@ async function main(): Promise<void> {
         coin={feedCoin}
         trails={params.get("trails") !== "0"}
         tape={params.get("tape") !== "0"}
+        overlays={params.get("ovl") !== "0"}
         view={params.get("view") === "spine" ? "spine" : "ladder"}
         onStateChange={syncUrl}
         {...(feed === undefined ? {} : { feed })}

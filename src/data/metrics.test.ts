@@ -150,3 +150,29 @@ describe("engine metrics on a recording", () => {
     expect(e.metrics(10_000)).not.toBe(first);
   });
 });
+
+describe("engine execution cost", () => {
+  it("prices a notional once the engine knows the market's scale", () => {
+    const e = createEngine({ gridTick: 10, scale: btc });
+    e.apply({
+      _tag: "l2Book",
+      stream: "slow",
+      bids: [lvl("99.0", 10), lvl("98.0", 10)],
+      asks: [lvl("100.0", 1), lvl("101.0", 10)],
+      time: 0,
+      rx: 1,
+    });
+    const m = e.metrics(1000);
+    expect(m.costBuy.exceedsVisibleDepth).toBe(false);
+    expect(m.costBuy.vwap).toBeGreaterThan(100);
+    expect(m.costBuy.vwap).toBeLessThan(101);
+    expect(m.costBuy.slippageBps).toBeGreaterThan(0);
+    expect(m.costSell.filledFraction).toBeCloseTo(1, 9);
+  });
+
+  it("reports an unusable cost when the engine has no scale yet", () => {
+    const e = createEngine({ gridTick: 10 });
+    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("99.0", 10)], asks: [lvl("100.0", 10)], time: 0, rx: 1 });
+    expect(e.metrics(1000).costBuy.exceedsVisibleDepth).toBe(true);
+  });
+});

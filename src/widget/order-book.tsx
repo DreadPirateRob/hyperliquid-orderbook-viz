@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedSource } from "../data/feed-events.types";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
+import { drawShapePanel } from "../render/shape-panel";
 import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
 import { createRuntime } from "./runtime";
 
@@ -15,6 +16,8 @@ export type OrderBookProps = {
   readonly trails?: boolean;
   /** Tape column on at mount; default on. */
   readonly tape?: boolean;
+  /** Metric overlays on at mount; default on. */
+  readonly overlays?: boolean;
   /** View at mount; default `"ladder"`. */
   readonly view?: View;
   /** Reports every user-driven state change so an embedder can mirror it (URL, storage). */
@@ -25,6 +28,7 @@ export type OrderBookProps = {
 export type WidgetState = {
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
+  readonly overlaysOn: boolean;
   readonly view: View;
 };
 
@@ -34,6 +38,7 @@ const BASE_STATE: RuntimeState = {
   trailsOn: true,
   tapeOn: true,
   overlaysOn: true,
+  metricsOn: false,
   paused: false,
   cadence: "60",
   ruler: 12,
@@ -41,7 +46,9 @@ const BASE_STATE: RuntimeState = {
 
 /**
  * The widget root. Owns the canvas surfaces and the chrome; data, state and
- * rendering live in plain TypeScript modules behind it (ADR 0003).
+ * rendering live in plain TypeScript modules behind it (ADR 0003). Only
+ * toggles go through React state; everything that changes per frame is
+ * written by ref.
  *
  * @param props - Initial state.
  * @returns The widget element.
@@ -52,33 +59,51 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const midRef = useRef<HTMLSpanElement>(null);
   const connRef = useRef<HTMLSpanElement>(null);
   const groupRef = useRef<HTMLSpanElement>(null);
+  const hudRef = useRef<HTMLPreElement>(null);
+  const shapeRef = useRef<HTMLCanvasElement>(null);
   const runtimeRef = useRef<Runtime | null>(null);
   const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
   const [tapeOn, setTapeOn] = useState(props.tape ?? true);
+  const [overlaysOn, setOverlaysOn] = useState(props.overlays ?? true);
+  const [metricsOn, setMetricsOn] = useState(false);
   const [view, setView] = useState<View>(props.view ?? "ladder");
   const feedProp = props.feed;
   const coin = props.coin;
   const onStateChange = props.onStateChange;
+
   // User-driven changes notify the embedder from the handler itself, not from an effect.
+  const report = useCallback(
+    (next: Partial<WidgetState>): void => {
+      onStateChange?.({ trailsOn, tapeOn, overlaysOn, view, ...next });
+    },
+    [onStateChange, trailsOn, tapeOn, overlaysOn, view],
+  );
   const toggleTrails = useCallback(() => {
     setTrailsOn((on) => {
-      onStateChange?.({ trailsOn: !on, tapeOn, view });
+      report({ trailsOn: !on });
       return !on;
     });
-  }, [onStateChange, tapeOn, view]);
+  }, [report]);
   const toggleTape = useCallback(() => {
     setTapeOn((on) => {
-      onStateChange?.({ trailsOn, tapeOn: !on, view });
+      report({ tapeOn: !on });
       return !on;
     });
-  }, [onStateChange, trailsOn, view]);
+  }, [report]);
+  const toggleOverlays = useCallback(() => {
+    setOverlaysOn((on) => {
+      report({ overlaysOn: !on });
+      return !on;
+    });
+  }, [report]);
   const toggleView = useCallback(() => {
     setView((v) => {
       const next = v === "ladder" ? "spine" : "ladder";
-      onStateChange?.({ trailsOn, tapeOn, view: next });
+      report({ view: next });
       return next;
     });
-  }, [onStateChange, trailsOn, tapeOn]);
+  }, [report]);
+  const toggleMetrics = useCallback(() => setMetricsOn((on) => !on), []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -99,6 +124,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         connRef.current.dataset["state"] = s.connection;
       }
       if (rootRef.current !== null) rootRef.current.dataset["connection"] = s.connection;
+      if (hudRef.current !== null && s.hud !== "") hudRef.current.textContent = s.hud;
+      if (shapeRef.current !== null && s.hud !== "") drawShapePanel(shapeRef.current, s.metrics);
     };
     // Seeded with the base state; the sync effect below pushes the current toggles right after mount.
     const runtime = createRuntime({ canvas, feed, state: BASE_STATE, onStatus });
@@ -110,8 +137,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   }, [feedProp, coin]);
 
   useEffect(() => {
-    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn, view });
-  }, [trailsOn, tapeOn, view]);
+    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn, overlaysOn, metricsOn, view });
+  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -119,10 +146,12 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       if (e.key === "t") toggleTrails();
       if (e.key === "p") toggleTape();
       if (e.key === "v") toggleView();
+      if (e.key === "o") toggleOverlays();
+      if (e.key === "m") toggleMetrics();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleTrails, toggleTape, toggleView]);
+  }, [toggleTrails, toggleTape, toggleView, toggleOverlays, toggleMetrics]);
 
   return (
     <div
@@ -132,6 +161,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       data-feed={feedProp === undefined ? "live" : "injected"}
       data-trails={trailsOn ? "1" : "0"}
       data-tape={tapeOn ? "1" : "0"}
+      data-overlays={overlaysOn ? "1" : "0"}
+      data-metrics={metricsOn ? "1" : "0"}
       data-view={view}
     >
       <div className="orderbook-bar">
@@ -142,17 +173,30 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         <span className="orderbook-group" ref={groupRef}>
           –
         </span>
+        <button type="button" className="orderbook-toggle" aria-pressed={view === "spine"} onClick={toggleView}>
+          {view}
+        </button>
         <button type="button" className="orderbook-toggle" aria-pressed={trailsOn} onClick={toggleTrails}>
           trails
         </button>
         <button type="button" className="orderbook-toggle" aria-pressed={tapeOn} onClick={toggleTape}>
           tape
         </button>
+        <button type="button" className="orderbook-toggle" aria-pressed={overlaysOn} onClick={toggleOverlays}>
+          overlays
+        </button>
+        <button type="button" className="orderbook-toggle" aria-pressed={metricsOn} onClick={toggleMetrics}>
+          metrics
+        </button>
         <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
           CONNECTING
         </span>
       </div>
       <canvas className="orderbook-canvas" ref={canvasRef} role="img" aria-label={`${coin} order book ladder`} />
+      <div className="orderbook-hud" hidden={!metricsOn}>
+        <pre ref={hudRef} />
+        <canvas ref={shapeRef} width={240} height={90} aria-hidden="true" />
+      </div>
     </div>
   );
 }

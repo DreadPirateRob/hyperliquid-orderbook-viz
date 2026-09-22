@@ -10,9 +10,10 @@ import { drawTape } from "../render/tape";
 import { PALETTE } from "../render/palette";
 import { createLevelHistory } from "../state/level-history";
 import { createTape } from "../state/tape";
+import { hudText } from "./hud";
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
-import type { ConnectionState } from "../data/engine-api.types";
+import type { ConnectionState, Metrics } from "../data/engine-api.types";
 
 /**
  * The imperative shell behind `<OrderBook>` (ADR 0008): owns the engine,
@@ -34,6 +35,8 @@ export type RuntimeState = {
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
   readonly overlaysOn: boolean;
+  /** Metrics HUD visible (`m`). */
+  readonly metricsOn: boolean;
   readonly paused: boolean;
   readonly cadence: Cadence;
   readonly ruler: number;
@@ -45,6 +48,10 @@ export type RuntimeStatus = {
   readonly mid: string;
   readonly coin: string;
   readonly groupLabel: string;
+  /** Metrics HUD text; empty when metrics are off. */
+  readonly hud: string;
+  /** Current metrics for the shape panel, or `undefined` when off. */
+  readonly metrics: Metrics | undefined;
 };
 
 /** Host inputs. */
@@ -82,7 +89,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let scale: PriceScale | undefined;
   let gridTick = 1;
   let groupLabel = "–";
-  const engine: Engine = createEngine({ gridTick });
+  const engine: Engine = createEngine({ gridTick, scale: undefined });
   const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
   const reducedMotion = (): boolean => reducedMotionQuery.matches;
   const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }), createTape(), {
@@ -95,6 +102,10 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let lastDraw = 0;
   let lastVersion = -1;
   let lastStatus = 0;
+  const frames: number[] = [];
+  let drawn = 0;
+  let fpsSince = performance.now();
+  let fps = 0;
   let raf = 0;
   let disposed = false;
 
@@ -120,7 +131,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       groupLabel = Grouping.deriveOptions(event.market.mark, scale).find((o) => o.gridTick === gridTick)?.label ?? "–";
       const sameCoin = market?.coin === event.market.coin;
       market = event.market;
-      engine.reset({ gridTick });
+      engine.reset({ gridTick, scale });
       sampler.reset(sameCoin ? "grid" : "coin");
       return;
     }
@@ -183,13 +194,36 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       else drawLadder(draw, S);
       if (draw.tapeOn) drawTape(draw, S);
     }
+    const frameMs = performance.now() - t;
+    frames.push(frameMs);
+    if (frames.length > 120) frames.shift();
+    drawn++;
     if (t - lastStatus > STATUS_MS) {
+      const sorted = [...frames].toSorted((a, b) => a - b);
+      const at = (q: number): number => sorted[Math.floor(q * (sorted.length - 1))] ?? 0;
+      fps = drawn / ((t - fpsSince) / 1000);
+      drawn = 0;
+      fpsSince = t;
       lastStatus = t;
+      const metrics = S?.metrics;
       options.onStatus({
         connection: snapshot.connection,
         mid: S === undefined || scale === undefined ? "–" : Tick.formatMid(S.mid, scale),
         coin: market?.coin ?? "–",
         groupLabel,
+        metrics,
+        hud: state.metricsOn
+          ? hudText({
+              coin: market?.coin ?? "–",
+              groupLabel,
+              snapshot,
+              metrics,
+              notional: state.notional,
+              fps,
+              frameP50: at(0.5),
+              frameP95: at(0.95),
+            })
+          : "",
       });
     }
   };

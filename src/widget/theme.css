@@ -102,3 +102,28 @@ body,
   color: var(--text);
   border-color: #ffffff55;
 }
+
+.orderbook-hud {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  background: #0f1319f2;
+  border: 1px solid #ffffff1a;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.orderbook-hud pre {
+  margin: 0;
+  font:
+    11px/1.45 ui-monospace,
+    Menlo,
+    monospace;
+  color: var(--text);
+  white-space: pre;
+}
