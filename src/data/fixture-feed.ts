@@ -11,6 +11,8 @@ import { parseWireMessage } from "./wire";
  * drive connection events; a resubscribe replays the recorded acks and
  * pushes as they were, since only the recorded precision exists.
  */
+
+/** Playback options. */
 export type FixtureFeedOptions = {
   /** Playback speed multiplier; `Infinity` delivers everything at once. */
   readonly speed: number;

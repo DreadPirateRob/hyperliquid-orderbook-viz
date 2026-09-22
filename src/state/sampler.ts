@@ -66,7 +66,8 @@ export function createSampler(): Sampler {
       const grid = geometry.gridTick;
       if (Math.abs(mid - anchor.target) > grid * half * RECENTRE_FRACTION) anchor.target = mid;
       const centre = anchor.step(dt);
-      const top = Math.round(centre / grid) * grid + half * grid;
+      // Rows below zero are impossible prices; the top row is at least (rows − 1) grid steps so no row goes negative.
+      const top = Math.max((rows - 1) * grid, Math.round(centre / grid) * grid + half * grid);
       const out = layRows(rows, top, grid, b, a, snapshot, t);
       const midIdx = out.findIndex((r) => r.px < mid);
       const ribY = midIdx === -1 ? rows * ROW : midIdx * ROW;
@@ -111,7 +112,7 @@ function layRows(count: number, top: number, grid: number, b: Tick, a: Tick, sna
   const asks = indexByPx(snapshot.asks);
   const out: MutableRow[] = [];
   for (let i = 0; i < count; i++) {
-    // SAFETY: `top` and `grid` are integers derived from ticks, so the row price is an integer tick.
+    // SAFETY: `top` and `grid` are integers derived from ticks and `top ≥ (count − 1)·grid`, so every row price is a non-negative integer tick.
     const px = (top - i * grid) as Tick;
     const side = px >= a ? "ask" : px <= b ? "bid" : "spread";
     const level = side === "ask" ? asks.get(px) : side === "bid" ? bids.get(px) : undefined;

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { ladderLayout } from "../src/render/ladder";
 
 /**
  * Seam 1: the widget entrypoint with an injected fixture feed. The demo's
@@ -13,18 +14,17 @@ test("BTC recording reaches LIVE and paints ladder rows", async ({ page }) => {
   await expect(page.locator(".orderbook-mid")).toHaveText(/^8\d{4}(\.\d)?$/);
   await expect(page.locator(".orderbook-group")).toHaveText("$1");
 
-  const painted = await page.locator("canvas.orderbook-canvas").evaluate((el) => {
+  const layout = ladderLayout(1500, true, true);
+  const painted = await page.locator("canvas.orderbook-canvas").evaluate((el, X) => {
     if (!(el instanceof HTMLCanvasElement)) return { bidRows: 0, askRows: 0, labels: 0 };
     const canvas = el;
     const ctx = canvas.getContext("2d");
     if (ctx === null) return { bidRows: 0, askRows: 0, labels: 0 };
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.width / dpr;
     const rowH = 22;
     const rows = Math.floor(canvas.height / dpr / rowH);
-    // The block column starts at ladderW − 300 − 170 with trails and tape on.
-    const blockX = width - 200 - 300 - 170 + 4;
-    const priceX = width - 200 - 300 - 170 - 30 - 12 - 20;
+    const blockX = X.block + 4;
+    const priceX = X.px - 20;
     let bidRows = 0;
     let askRows = 0;
     let labels = 0;
@@ -37,7 +37,7 @@ test("BTC recording reaches LIVE and paints ladder rows", async ({ page }) => {
       if ((px[0] ?? 0) + (px[1] ?? 0) + (px[2] ?? 0) > 150) labels++;
     }
     return { bidRows, askRows, labels };
-  });
+  }, layout);
   expect(painted.bidRows).toBeGreaterThan(2);
   expect(painted.askRows).toBeGreaterThan(2);
   expect(painted.labels).toBeGreaterThan(5);

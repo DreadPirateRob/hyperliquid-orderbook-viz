@@ -2,3 +2,5 @@ node_modules/
 dist/
 prototype/
 *.tsbuildinfo
+test-results/
+playwright-report/

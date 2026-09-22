@@ -117,12 +117,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
     const t = performance.now();
-    const dt = Math.min(0.05, (t - lastT) / 1000);
-    lastT = t;
     const snapshot = engine.snapshot();
     const cap = state.cadence === "30" ? FPS30_CAP_MS : 0;
     if (state.cadence === "update" && snapshot.version === lastVersion && !sampler.moving()) return;
     if (t - lastDraw < cap) return;
+    // v4 measures dt per rAF; here it spans skipped frames so springs advance in real time at 30 fps.
+    const dt = Math.min(0.05, (t - lastT) / 1000);
+    lastT = t;
     lastDraw = t;
     lastVersion = snapshot.version;
     ctx.fillStyle = PALETTE.bg;

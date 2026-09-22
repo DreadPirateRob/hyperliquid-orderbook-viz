@@ -2,7 +2,7 @@ import * as Tick from "../domain/tick";
 import type { FrameRow, FrameSample } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
 import type { DrawContext } from "./draw.types";
-import { PALETTE, formatSize, rgba, sideColour, text } from "./palette";
+import { FONT, PALETTE, formatSize, rgba, sideColour, text } from "./palette";
 
 /**
  * v4's `drawLadder`: the classic ladder view. This module carries the static
@@ -106,7 +106,7 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
     if (d.trailsOn) {
       const lx = X.block + w + 6;
       const lbl = formatSize(row.shown);
-      ctx.font = `11px ui-monospace,Menlo,monospace`;
+      ctx.font = `11px ${FONT}`;
       const tw = ctx.measureText(lbl).width;
       ctx.fillStyle = "#0b0e11cc";
       ctx.fillRect(lx - 2, y + 5, tw + 4, ROW - 10);
