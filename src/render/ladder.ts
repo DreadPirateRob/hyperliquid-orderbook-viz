@@ -1,5 +1,5 @@
 import * as Tick from "../domain/tick";
-import type { FrameRow, FrameSample } from "../state/frame-sample.types";
+import type { FrameRow, FrameSample, Pulse } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
 import type { DrawContext } from "./draw.types";
 import { FONT, PALETTE, formatSize, rgba, sideColour, text } from "./palette";
@@ -49,6 +49,19 @@ export function ladderLayout(width: number, trailsOn: boolean, tapeOn: boolean):
     return { px, heat, lane: heat + 18, block, blockW: BLOCK_W, size: 0, trail, trailW: Math.max(120, px - 150 - trail), ladderW };
   }
   return { px: 90, heat: 110, lane: 130, block: 230, blockW: Math.min(360, ladderW - 230 - 260), size: 200, trail: 215, trailW: 0, ladderW };
+}
+
+/** v4 pulse decay constants (ms). */
+const PULSE_TAU: Record<Pulse["kind"], number> = { fill: 500, ghost: 700, add: 450, grew: 400 };
+
+/** Per-kind intensity of a row's pulses at frame time `t` (v4 `pulseState`); the strongest of each kind wins. */
+export function pulseState(pulses: ReadonlyArray<Pulse>, t: number): Record<Pulse["kind"], number> {
+  const o = { fill: 0, ghost: 0, add: 0, grew: 0 };
+  for (const p of pulses) {
+    const v = Math.exp(-(t - p.t0) / PULSE_TAU[p.kind]);
+    if (v > o[p.kind]) o[p.kind] = v;
+  }
+  return o;
 }
 
 /** v4 `persistence`: saturation ramps over 20 s from first sight. */
@@ -102,6 +115,26 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
     const w = (row.shown / S.maxSz) * X.blockW;
     ctx.fillStyle = rgba(h.c, 0.22 + 0.5 * persistence(row, S.t));
     ctx.fillRect(X.block, y + 3, w, ROW - 6);
+    const ps = pulseState(row.pulses, S.t);
+    if (ps.ghost > 0) {
+      ctx.fillStyle = rgba(c, 0.25 * ps.ghost);
+      ctx.fillRect(X.block + w, y + 3, Math.max(0, ((row.prev - row.live) / S.maxSz) * X.blockW), ROW - 6);
+    }
+    if (ps.add > 0) {
+      ctx.strokeStyle = rgba(PALETTE.white, 0.8 * ps.add);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(X.block + 0.5, y + 3.5, Math.max(w, 2), ROW - 7);
+    }
+    if (ps.fill > 0) {
+      ctx.fillStyle = rgba(PALETTE.white, 0.55 * ps.fill);
+      ctx.fillRect(X.heat - 6, y + 2, 4, ROW - 4);
+      ctx.fillStyle = rgba(PALETTE.hot, 0.35 * ps.fill);
+      ctx.fillRect(0, y, W, ROW);
+    }
+    if (ps.grew > 0) {
+      ctx.fillStyle = rgba(c, 0.12 * ps.grew);
+      ctx.fillRect(X.block, y, X.blockW, ROW);
+    }
     text(ctx, label, X.px, cy, round ? PALETTE.text : rgba(c, 0.9), "right", 12, round);
     if (d.trailsOn) {
       const lx = X.block + w + 6;
