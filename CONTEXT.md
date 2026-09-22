@@ -152,3 +152,9 @@ The pulse drawn at a ladder row when a trade hits that price.
 **HUD**:
 The optional engineering panel showing connection, feed, engine, and renderer telemetry.
 _Avoid_: diagnostics panel, debug panel
+
+- **Data layer**: feed adapter + engine; produces facts (book, lifecycle events, metrics) via a pull API; no animation, layout, or pixels (ADR 0003).
+- **State layer**: widget state, prefs, and the v4-ported sampler (per-price animation map, anchor, layout, tape aggregation); turns facts into one frame sample per tick; no DOM, canvas, or I/O (ADR 0003).
+- **Rendering layer**: stateless draw functions over the frame sample plus the React chrome; never reads the book (ADR 0003).
+- **Frame sample**: the state layer's per-tick output (v4's `S`): rows, ruler max, boundary, tape rows, metrics view — everything the rendering layer needs and nothing it doesn't.
+- **Parity gate**: side-by-side check of prototype v4 and the port on the same live feed, screenshots per stage, user sign-off (ADR 0009).
