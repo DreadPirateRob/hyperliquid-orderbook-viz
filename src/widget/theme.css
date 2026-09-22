@@ -26,3 +26,60 @@ body,
   height: 100%;
   overflow: hidden;
 }
+
+.orderbook {
+  display: grid;
+  grid-template-rows: 44px 1fr;
+}
+
+.orderbook-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px;
+  border-bottom: 1px solid #ffffff14;
+  font-size: 12px;
+}
+
+.orderbook-pair {
+  font-weight: 600;
+}
+
+.orderbook-mid {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.orderbook-group,
+.orderbook-conn {
+  color: var(--dim);
+}
+
+.orderbook-conn::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--dim);
+}
+
+.orderbook-conn[data-state="LIVE"]::before {
+  background: var(--bid);
+}
+
+.orderbook-conn[data-state="STALE"]::before,
+.orderbook-conn[data-state="RESYNCING"]::before {
+  background: var(--hot);
+}
+
+.orderbook-conn[data-state="DISCONNECTED"]::before {
+  background: var(--ask);
+}
+
+.orderbook-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
