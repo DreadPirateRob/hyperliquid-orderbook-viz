@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import * as Tick from "./tick";
 import { priceScale, tick } from "./tick.arbitrary";
 
-function scale(kind: Tick.MarketKind, szDecimals: number): Tick.PriceScale {
+function scaleOf(kind: Tick.MarketKind, szDecimals: number): Tick.PriceScale {
   const r = Tick.makeScale(kind, szDecimals);
   if (r._tag === "err") throw r.error;
   return r.value;
 }
 
-const btc = scale("perp", 5); // rawTick 0.1
-const spot = scale("spot", 2); // rawTick 1e-6
+const btc = scaleOf("perp", 5); // rawTick 0.1
+const spot = scaleOf("spot", 2); // rawTick 1e-6
 
 function parsed(px: string, scale: Tick.PriceScale): Tick.Tick {
   const r = Tick.parse(px, scale);
@@ -29,7 +29,7 @@ describe("Tick.parse", () => {
 
   it("does not round-trip through floats", () => {
     // 0.1 + 0.2 style inputs: 8 decimals of a large spot price
-    expect(parsed("40000.12345678", scale("spot", 0))).toBe(4000012345678);
+    expect(parsed("40000.12345678", scaleOf("spot", 0))).toBe(4000012345678);
   });
 
   it("accepts trailing zeros beyond the scale", () => {
@@ -54,7 +54,7 @@ describe("Tick.format", () => {
     expect(Tick.format(parsed("111234.5", btc), btc)).toBe("111234.5");
     expect(Tick.format(parsed("5", btc), btc)).toBe("5.0");
     expect(Tick.format(parsed("0.000001", spot), spot)).toBe("0.000001");
-    const zero = scale("perp", 6);
+    const zero = scaleOf("perp", 6);
     expect(Tick.format(parsed("7", zero), zero)).toBe("7");
     expect(Tick.format(parsed("0", btc), btc)).toBe("0.0");
   });
@@ -70,9 +70,9 @@ describe("Tick.format", () => {
 
 describe("Tick.makeScale", () => {
   it("derives decimals as D − szDecimals (6 perp, 8 spot)", () => {
-    expect(scale("perp", 5).decimals).toBe(1);
-    expect(scale("spot", 2).decimals).toBe(6);
-    expect(scale("perp", 0).decimals).toBe(6);
+    expect(scaleOf("perp", 5).decimals).toBe(1);
+    expect(scaleOf("spot", 2).decimals).toBe(6);
+    expect(scaleOf("perp", 0).decimals).toBe(6);
   });
 
   it("rejects szDecimals outside [0, D] or non-integer", () => {
