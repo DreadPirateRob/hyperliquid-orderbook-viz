@@ -4,6 +4,8 @@ import type { PriceScale } from "../domain/tick";
 import type { DepthStream, FeedEvent, FeedSource } from "./feed-events.types";
 import type { Fetch } from "./hyperliquid-info";
 import { fetchMarketMeta } from "./hyperliquid-info";
+import { createSubscriptionGate } from "./subscription-gate";
+import type { SubscriptionGate } from "./subscription-gate";
 import { parseWireMessage } from "./wire";
 
 /**
@@ -30,12 +32,20 @@ export type HyperliquidFeedOptions = {
  * Build the live feed.
  *
  * @param options - Coin, precision and host capabilities.
- * @returns A feed source; `select` is delivered by the grouping ticket.
+ * @returns A feed source; `select` switches precision on the live socket.
  */
 export function createHyperliquidFeed(options: HyperliquidFeedOptions): FeedSource {
+  let session: Session | undefined;
   return {
-    start: (listener) => new Session(options, listener).stop,
-    select: () => {},
+    start: (listener) => {
+      const started = new Session(options, listener);
+      session = started;
+      return () => {
+        started.stop();
+        if (session === started) session = undefined;
+      };
+    },
+    select: (coin, precision) => session?.select(coin, precision),
   };
 }
 
@@ -47,7 +57,8 @@ class Session {
   private scale: PriceScale | undefined;
   private precision: Precision | undefined;
   private tradesHistorical = true;
-  private readonly acked: Record<DepthStream, boolean> = { slow: false, fast: false };
+  private gate: SubscriptionGate | undefined;
+  private mark = 1;
 
   constructor(
     private readonly options: HyperliquidFeedOptions,
@@ -94,8 +105,9 @@ class Session {
     this.ws = ws;
     this.listener({ _tag: "connection", event: { _tag: "connecting" }, rx: Date.now() });
     ws.addEventListener("open", () => {
-      this.acked.slow = false;
-      this.acked.fast = false;
+      if (this.precision !== undefined && this.scale !== undefined) {
+        this.gate = createSubscriptionGate(this.precision, Grouping.gridTickFor(this.mark, this.precision, this.scale));
+      }
       this.tradesHistorical = true;
       this.listener({ _tag: "connection", event: { _tag: "open" }, rx: Date.now() });
       for (const stream of ["slow", "fast"] as const)
@@ -114,15 +126,46 @@ class Session {
     });
   }
 
-  private bookSubscription(stream: DepthStream): Record<string, unknown> {
-    const p = this.precision;
-    const sub: Record<string, unknown> = { type: "l2Book", coin: this.options.coin };
-    if (stream === "fast") sub["fast"] = true;
-    if (p !== undefined && p._tag === "aggregated") {
-      sub["nSigFigs"] = p.nSigFigs;
-      if (p.mantissa !== undefined) sub["mantissa"] = p.mantissa;
+  /**
+   * Switch coin and/or precision. A change while another is still pending is
+   * queued by the gate and fired when the outstanding acks land (ADR 0007).
+   */
+  readonly select = (coin: string, precision: Precision): void => {
+    if (coin !== this.options.coin || this.scale === undefined) return;
+    const action = this.gate?.select(precision, Grouping.gridTickFor(this.mark, precision, this.scale));
+    if (action?._tag === "resubscribe") this.resubscribe(action.to);
+  };
+
+  /** Unsubscribe both books, announce the new market, then subscribe both. */
+  private resubscribe(precision: Precision): void {
+    const ws = this.ws;
+    if (ws === undefined || ws.readyState !== ws.OPEN || this.scale === undefined) return;
+    const previous = this.precision;
+    if (previous !== undefined) {
+      for (const stream of ["slow", "fast"] as const) {
+        ws.send(
+          JSON.stringify({
+            method: "unsubscribe",
+            subscription: bookSubscription(this.options.coin, stream, previous),
+          }),
+        );
+      }
     }
-    return sub;
+    this.precision = precision;
+    this.listener({
+      _tag: "market",
+      market: { coin: this.options.coin, scale: this.scale, precision, mark: this.mark },
+      rx: Date.now(),
+    });
+    for (const stream of ["slow", "fast"] as const) {
+      ws.send(
+        JSON.stringify({ method: "subscribe", subscription: bookSubscription(this.options.coin, stream, precision) }),
+      );
+    }
+  }
+
+  private bookSubscription(stream: DepthStream): Record<string, unknown> {
+    return bookSubscription(this.options.coin, stream, this.precision ?? { _tag: "full" });
   }
 
   private onMessage(data: unknown): void {
@@ -154,11 +197,18 @@ class Session {
       case "ignored":
         return;
       case "ack":
-        if (ev.subscription._tag === "l2Book" && ev.method === "subscribe") this.acked[ev.subscription.stream] = true;
+        if (ev.subscription._tag === "l2Book" && ev.method === "subscribe") {
+          const queued = this.gate?.acked(ev.subscription.stream, ev.subscription.precision);
+          if (queued?._tag === "resubscribe") this.resubscribe(queued.to);
+        }
         break;
-      case "l2Book":
-        if (!this.acked[ev.stream]) return;
+      case "l2Book": {
+        const prices: number[] = [];
+        for (const l of ev.bids) prices.push(l.px);
+        for (const l of ev.asks) prices.push(l.px);
+        if (this.gate?.accepts(ev.stream, prices) !== true) return;
         break;
+      }
       case "trades":
         this.tradesHistorical = false;
         break;
@@ -167,4 +217,15 @@ class Session {
     }
     this.listener(ev);
   }
+}
+
+/** The venue's `l2Book` subscription object; mantissa is only sent alongside sig-figs. */
+function bookSubscription(coin: string, stream: DepthStream, precision: Precision): Record<string, unknown> {
+  const sub: Record<string, unknown> = { type: "l2Book", coin };
+  if (stream === "fast") sub["fast"] = true;
+  if (precision._tag === "aggregated") {
+    sub["nSigFigs"] = precision.nSigFigs;
+    if (precision.mantissa !== undefined) sub["mantissa"] = precision.mantissa;
+  }
+  return sub;
 }
