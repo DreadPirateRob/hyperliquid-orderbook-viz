@@ -49,3 +49,33 @@ test("the live entrypoint mounts and starts connecting", async ({ page }) => {
   await expect(root).toHaveAttribute("data-feed", "live");
   await expect(root).toHaveAttribute("data-coin", "BTC");
 });
+
+test("the HUD updates by ref: no React commits at steady state", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  await expect(page.locator(".orderbook")).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+  await page.keyboard.press("m");
+  await expect(page.locator(".orderbook")).toHaveAttribute("data-metrics", "1");
+  await expect(page.locator(".orderbook-hud pre")).toContainText("PRESSURE", { timeout: 5000 });
+
+  const before = await page.evaluate(
+    () => (globalThis as { __obCommits?: { count: number } }).__obCommits?.count ?? -1,
+  );
+  const hudBefore = await page.locator(".orderbook-hud pre").textContent();
+  await page.waitForTimeout(3000);
+  const after = await page.evaluate(() => (globalThis as { __obCommits?: { count: number } }).__obCommits?.count ?? -1);
+  const hudAfter = await page.locator(".orderbook-hud pre").textContent();
+
+  expect(after).toBe(before);
+  expect(hudAfter, "the HUD keeps updating while React is idle").not.toBe(hudBefore);
+});
+
+test("overlays and metrics toggle from the keyboard and survive in the URL", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-overlays", "1");
+  await page.keyboard.press("o");
+  await expect(root).toHaveAttribute("data-overlays", "0");
+  await expect(page).toHaveURL(/ovl=0/);
+  await page.keyboard.press("o");
+  await expect(page).not.toHaveURL(/ovl=0/);
+});

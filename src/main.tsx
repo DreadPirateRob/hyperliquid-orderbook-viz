@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+import { Profiler, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import type { FeedSource } from "./data/feed-events.types";
 import { createFixtureFeed } from "./data/fixture-feed";
@@ -25,6 +25,13 @@ function syncUrl(state: WidgetState): void {
   history.replaceState(null, "", url);
 }
 
+function onCommit(): void {
+  const commits = Reflect.get(globalThis, "__obCommits");
+  if (typeof commits === "object" && commits !== null && "count" in commits && typeof commits.count === "number") {
+    commits.count++;
+  }
+}
+
 async function main(): Promise<void> {
   const root = document.getElementById("root");
   if (root === null) throw new Error("index.html must contain #root");
@@ -42,17 +49,23 @@ async function main(): Promise<void> {
     feed = createFixtureFeed(fixture.value, { speed: Number(params.get("speed") ?? "1") || 1 });
     feedCoin = fixture.value.meta.coin;
   }
+  // Demo-only instrumentation: the proof surface asserts the widget does not
+  // re-render at steady state, so the demo exposes React's commit count.
+  const commits = { count: 0 };
+  Reflect.set(globalThis, "__obCommits", commits);
   createRoot(root).render(
     <StrictMode>
-      <OrderBook
-        coin={feedCoin}
-        trails={params.get("trails") !== "0"}
-        tape={params.get("tape") !== "0"}
-        overlays={params.get("ovl") !== "0"}
-        view={params.get("view") === "spine" ? "spine" : "ladder"}
-        onStateChange={syncUrl}
-        {...(feed === undefined ? {} : { feed })}
-      />
+      <Profiler id="orderbook" onRender={onCommit}>
+        <OrderBook
+          coin={feedCoin}
+          trails={params.get("trails") !== "0"}
+          tape={params.get("tape") !== "0"}
+          overlays={params.get("ovl") !== "0"}
+          view={params.get("view") === "spine" ? "spine" : "ladder"}
+          onStateChange={syncUrl}
+          {...(feed === undefined ? {} : { feed })}
+        />
+      </Profiler>
     </StrictMode>,
   );
 }
