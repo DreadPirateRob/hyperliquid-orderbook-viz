@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as Tick from "../domain/tick";
-import { pulseState, tagY, trailX, yOf } from "./ladder";
+import { pulseState, rowAtY, tagY, trailX, yOf } from "./ladder";
 
 function tick(n: number): Tick.Tick {
   const r = Tick.fromInteger(n);
@@ -102,5 +102,37 @@ describe("tagY", () => {
     expect(tagY(frame, 1100, 10)).toBe(11);
     expect(tagY(frame, 900, 10)).toBe(55);
     for (const px of [1100, 900, 1010]) expect((tagY(frame, px, 10) - 11) % 22).toBe(0);
+  });
+});
+
+describe("rowAtY", () => {
+  const rows = [1020, 1010, 1000].map((px, i) => ({
+    i,
+    y: i * 22,
+    px: tick(px),
+    side: "bid" as const,
+    shown: 0,
+    live: 0,
+    prev: 0,
+    cum: 0,
+    inRuler: true,
+    field: 0,
+    watch: undefined,
+    pulses: [],
+    first: 0,
+    trail: [],
+  }));
+
+  it("returns the row whose band contains the pointer, edges included at the top", () => {
+    expect(rowAtY(rows, 0)?.i).toBe(0);
+    expect(rowAtY(rows, 21.9)?.i).toBe(0);
+    expect(rowAtY(rows, 22)?.i).toBe(1);
+    expect(rowAtY(rows, 65)?.i).toBe(2);
+  });
+
+  it("returns nothing off the ladder", () => {
+    expect(rowAtY(rows, -1)).toBeUndefined();
+    expect(rowAtY(rows, 66)).toBeUndefined();
+    expect(rowAtY([], 10)).toBeUndefined();
   });
 });

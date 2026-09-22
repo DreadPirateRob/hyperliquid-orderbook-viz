@@ -86,6 +86,20 @@ body,
   display: block;
   width: 100%;
   height: 100%;
+  /* The canvas owns its gestures: pinch groups, drag hovers, neither scrolls the page. */
+  touch-action: none;
+}
+
+/* Visible to assistive tech only: the canvas carries no readable text. */
+.orderbook-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .orderbook-toggle {
@@ -297,4 +311,42 @@ body,
 
 .orderbook-gearpop output {
   color: var(--text);
+}
+
+/* A column the width cannot hold is not offered; the toggle goes with it. */
+.orderbook-toggle:disabled {
+  display: none;
+}
+
+/* Below the trails breakpoint a 340 px panel no longer fits beside the bar: both popovers become a bottom sheet. */
+.orderbook[data-sheet="1"] .orderbook-pairpop,
+.orderbook[data-sheet="1"] .orderbook-gearpop {
+  top: auto;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: auto;
+  max-height: 70vh;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 0;
+}
+
+.orderbook[data-sheet="1"] .orderbook-bar {
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.orderbook[data-sheet="1"] .orderbook-stats {
+  display: none;
+}
+
+/* Below the overlays breakpoint the segmented control is finger-hostile; pinch replaces it. */
+.orderbook[data-compact="1"] .orderbook-groupseg {
+  display: none;
+}
+
+.orderbook[data-compact="1"] .orderbook-bar {
+  gap: 8px;
+  padding: 0 8px;
 }

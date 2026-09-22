@@ -72,6 +72,8 @@ export type RuntimeOptions = {
 export type Runtime = {
   /** Adopt new widget state; cheap, diffs internally. */
   readonly update: (state: RuntimeState) => void;
+  /** Pointer y in CSS px within the canvas, or `undefined` when the pointer left. */
+  readonly setHover: (y: number | undefined) => void;
   /** Stop the loop, the feed and the observers. */
   readonly dispose: () => void;
 };
@@ -121,6 +123,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let lastFrame: FrameSample | undefined;
   let raf = 0;
   let disposed = false;
+  let hoverY: number | undefined;
+  let hoverDirty = false;
 
   const resize = (): void => {
     const dpr = window.devicePixelRatio || 1;
@@ -183,7 +187,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     const t = performance.now();
     const snapshot = engine.snapshot();
     const cap = state.cadence === "30" ? FPS30_CAP_MS : 0;
-    if (state.cadence === "update" && snapshot.version === lastVersion && !sampler.moving()) return;
+    // Hover is not book state, so an `on update` cadence would otherwise hold the stale frame.
+    if (state.cadence === "update" && snapshot.version === lastVersion && !sampler.moving() && !hoverDirty) return;
+    hoverDirty = false;
     if (t - lastDraw < cap) return;
     // v4 measures dt per rAF; here it spans skipped frames so springs advance in real time at 30 fps.
     const dt = Math.min(0.05, (t - lastT) / 1000);
@@ -241,6 +247,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         trailsOn: state.trailsOn && state.view === "ladder",
         tapeOn: state.tapeOn && state.view === "ladder",
         overlaysOn: state.overlaysOn,
+        ...(hoverY === undefined ? {} : { hoverY }),
       };
       // The spine is the narrow reading: no trails, no tape (spec, story 7).
       if (state.view === "spine") drawSpine(draw, S);
@@ -288,6 +295,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     update: (next) => {
       state = next;
       applyWantedGrid();
+    },
+    setHover: (y) => {
+      if (y === hoverY) return;
+      hoverY = y;
+      hoverDirty = true;
     },
     dispose: () => {
       disposed = true;

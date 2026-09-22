@@ -130,6 +130,17 @@ export function heatColour(
 }
 
 /**
+ * The row whose band contains a canvas y, or `undefined` above/below the ladder.
+ *
+ * @param rows - Frame rows, each carrying its band top.
+ * @param y - Canvas y in CSS px.
+ * @returns The row under the pointer.
+ */
+export function rowAtY(rows: ReadonlyArray<FrameRow>, y: number): FrameRow | undefined {
+  return rows.find((r) => y >= r.y && y < r.y + ROW);
+}
+
+/**
  * Paint the ladder for one frame.
  *
  * @param d - Draw context (canvas, geometry, toggles).
@@ -141,6 +152,15 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
   const W = d.width;
   const CH = d.height;
   drawProfile(ctx, S, X, CH);
+  // Hover is painted on the canvas: there are no DOM rows to style, and a
+  // highlight under the content keeps the row readable (spec, story 41).
+  const hovered = d.hoverY === undefined ? undefined : rowAtY(S.rows, d.hoverY);
+  if (hovered !== undefined) {
+    ctx.fillStyle = rgba(PALETTE.white, 0.06);
+    ctx.fillRect(0, hovered.y, X.ladderW, ROW);
+    ctx.fillStyle = rgba(PALETTE.white, 0.35);
+    ctx.fillRect(0, hovered.y, 2, ROW);
+  }
   for (const row of S.rows) {
     const y = row.y;
     const cy = y + ROW / 2;

@@ -13,6 +13,8 @@ export type DrawContext = {
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
   readonly overlaysOn: boolean;
+  /** Pointer position in CSS px within the canvas, or absent when the pointer is away. */
+  readonly hoverY?: number;
 };
 
 /** A stateless painter: reads the sample, writes pixels, keeps nothing. */

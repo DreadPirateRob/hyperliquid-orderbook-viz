@@ -13,6 +13,8 @@ import { Settings } from "./settings";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
 import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
 import { createRuntime } from "./runtime";
+import { createPinchTracker } from "./pinch";
+import { useAffordances } from "./use-affordances";
 
 /** Props seed the initial state only (ADR 0008); later changes are reported, not applied. */
 export type OrderBookProps = {
@@ -103,6 +105,15 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const [settings, setSettings] = useState<Prefs>(props.prefs?.get() ?? DEFAULT_PREFS);
   const gearButtonRef = useRef<HTMLButtonElement>(null);
   const pairButtonRef = useRef<HTMLButtonElement>(null);
+  const liveRef = useRef<HTMLParagraphElement>(null);
+  const pinch = useRef(createPinchTracker());
+  const lastAnnounce = useRef(0);
+  const affordances = useAffordances(rootRef);
+  // Width caps the user's toggles; it never turns a column the user switched off back on.
+  const trailsShown = trailsOn && affordances.trails;
+  const tapeShown = tapeOn && affordances.tape;
+  const overlaysShown = overlaysOn && affordances.overlays;
+  const viewShown = affordances.forcedView ?? view;
   const feedProp = props.feed;
   const prefs = props.prefs;
   // One shared, deduplicating fetch: feed boot, pair list and stats ask for the
@@ -203,6 +214,40 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     [groups, gridTick, selectGroup],
   );
 
+  /** Pointer y within the canvas, in CSS px. */
+  const localY = useCallback((clientY: number): number => {
+    const box = canvasRef.current?.getBoundingClientRect();
+    return box === undefined ? 0 : clientY - box.top;
+  }, []);
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>): void => {
+      pinch.current.down(e.pointerId, e.clientX, e.clientY);
+      if (pinch.current.pinching()) runtimeRef.current?.setHover(undefined);
+      else if (e.pointerType !== "mouse") runtimeRef.current?.setHover(localY(e.clientY));
+    },
+    [localY],
+  );
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>): void => {
+      if (pinch.current.pinching()) {
+        // Options run finest first, so spreading the fingers walks down the list.
+        const step = pinch.current.move(e.pointerId, e.clientX, e.clientY);
+        if (step !== undefined) stepGroup(step === "finer" ? -1 : 1);
+        return;
+      }
+      pinch.current.move(e.pointerId, e.clientX, e.clientY);
+      runtimeRef.current?.setHover(localY(e.clientY));
+    },
+    [localY, stepGroup],
+  );
+  const onPointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+    pinch.current.up(e.pointerId);
+  }, []);
+  const onPointerLeave = useCallback((e: React.PointerEvent<HTMLCanvasElement>): void => {
+    pinch.current.up(e.pointerId);
+    runtimeRef.current?.setHover(undefined);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     void fetchUniverse(fetchFn).then((r) => {
@@ -236,6 +281,16 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       }
       if (rootRef.current !== null) rootRef.current.dataset["connection"] = s.connection;
       if (hudRef.current !== null && s.hud !== "") hudRef.current.textContent = s.hud;
+      // Text alternative for the canvas, plus a polite announcement at no more
+      // than 1 Hz: the mid moves several times a second and a screen reader
+      // reading every change is unusable (spec, story 42).
+      const alternative = `${s.coin} order book, grouping ${s.groupLabel}, mid ${s.mid}, ${s.connection.toLowerCase()}`;
+      canvas.setAttribute("aria-label", alternative);
+      const now = performance.now();
+      if (liveRef.current !== null && now - lastAnnounce.current >= 1000) {
+        lastAnnounce.current = now;
+        liveRef.current.textContent = alternative;
+      }
       setGroups((prev) =>
         prev.active === s.gridTick && prev.options === s.groupOptions
           ? prev
@@ -254,18 +309,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   useEffect(() => {
     runtimeRef.current?.update({
       ...BASE_STATE,
-      trailsOn,
-      tapeOn,
-      overlaysOn,
+      trailsOn: trailsShown,
+      tapeOn: tapeShown,
+      overlaysOn: overlaysShown,
       metricsOn,
-      view,
+      view: viewShown,
       gridTick,
       paused,
       cadence: settings.cadence,
       ruler: settings.ruler,
       notional: settings.notional,
     });
-  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick, paused, settings]);
+  }, [trailsShown, tapeShown, overlaysShown, metricsOn, viewShown, gridTick, paused, settings]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -300,12 +355,14 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       ref={rootRef}
       data-coin={coin}
       data-feed={feedProp === undefined ? "live" : "injected"}
-      data-trails={trailsOn ? "1" : "0"}
-      data-tape={tapeOn ? "1" : "0"}
-      data-overlays={overlaysOn ? "1" : "0"}
+      data-trails={trailsShown ? "1" : "0"}
+      data-tape={tapeShown ? "1" : "0"}
+      data-overlays={overlaysShown ? "1" : "0"}
       data-metrics={metricsOn ? "1" : "0"}
-      data-view={view}
+      data-view={viewShown}
       data-paused={paused ? "1" : "0"}
+      data-sheet={affordances.sheet ? "1" : "0"}
+      data-compact={affordances.forcedView === undefined ? "0" : "1"}
     >
       <div className="orderbook-bar">
         <button
@@ -333,16 +390,40 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             />
           ))}
         </span>
-        <button type="button" className="orderbook-toggle" aria-pressed={view === "spine"} onClick={toggleView}>
-          {view}
+        <button
+          type="button"
+          className="orderbook-toggle"
+          aria-pressed={viewShown === "spine"}
+          disabled={affordances.forcedView !== undefined}
+          onClick={toggleView}
+        >
+          {viewShown}
         </button>
-        <button type="button" className="orderbook-toggle" aria-pressed={trailsOn} onClick={toggleTrails}>
+        <button
+          type="button"
+          className="orderbook-toggle"
+          aria-pressed={trailsShown}
+          disabled={!affordances.trails}
+          onClick={toggleTrails}
+        >
           trails
         </button>
-        <button type="button" className="orderbook-toggle" aria-pressed={tapeOn} onClick={toggleTape}>
+        <button
+          type="button"
+          className="orderbook-toggle"
+          aria-pressed={tapeShown}
+          disabled={!affordances.tape}
+          onClick={toggleTape}
+        >
           tape
         </button>
-        <button type="button" className="orderbook-toggle" aria-pressed={overlaysOn} onClick={toggleOverlays}>
+        <button
+          type="button"
+          className="orderbook-toggle"
+          aria-pressed={overlaysShown}
+          disabled={!affordances.overlays}
+          onClick={toggleOverlays}
+        >
           overlays
         </button>
         <button type="button" className="orderbook-toggle" aria-pressed={metricsOn} onClick={toggleMetrics}>
@@ -385,7 +466,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         />
       ) : null}
       {gearOpen ? <Settings prefs={settings} onChange={changeSettings} onClose={closeGear} /> : null}
-      <canvas className="orderbook-canvas" ref={canvasRef} role="img" aria-label={`${coin} order book ladder`} />
+      <canvas
+        className="orderbook-canvas"
+        ref={canvasRef}
+        role="img"
+        aria-label={`${coin} order book ladder`}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={onPointerLeave}
+      />
+      <p className="orderbook-live" ref={liveRef} role="status" aria-live="polite" />
       {metricsOn ? (
         <div className="orderbook-hud">
           <pre ref={hudRef} />
