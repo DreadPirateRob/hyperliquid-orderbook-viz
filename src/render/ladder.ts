@@ -360,6 +360,8 @@ function drawTouchPaths(
     ctx.stroke();
   }
   ctx.restore();
+  // Without a BBO the bests are grouped book rows; a price tag would misreport the touch.
+  if (!S.rawTouch) return;
   for (const side of sides) {
     const yy = yOf(S.rows, side.now);
     pill(ctx, Tick.format(side.now, scale), X.trail + X.trailW - 1, yy + side.dy, "right", rgba(side.c, 0.95), 9, 12);

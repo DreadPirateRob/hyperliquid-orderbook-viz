@@ -72,6 +72,12 @@ export type FrameSample = {
   readonly share: number;
   readonly bestBid: Tick;
   readonly bestAsk: Tick;
+  /**
+   * True when both bests come from the BBO stream, i.e. they are the venue's
+   * real touch. False means they are grouped book bests standing in, and no
+   * price label may claim them (they can sit a whole grouping step apart).
+   */
+  readonly rawTouch: boolean;
   readonly bestBidSz: number;
   readonly bestAskSz: number;
   /** Touch history over the trails window, oldest first. */

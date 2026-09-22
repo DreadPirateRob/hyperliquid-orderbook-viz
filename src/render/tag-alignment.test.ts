@@ -112,6 +112,7 @@ function frame(lastPx: number): FrameSample {
     bestAsk: tick(855480),
     bestBidSz: 1,
     bestAskSz: 1,
+    rawTouch: true,
     midTrail: [],
     migrations: [],
     metrics: undefined,

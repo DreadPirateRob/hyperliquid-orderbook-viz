@@ -246,3 +246,23 @@ describe("diff property", () => {
     );
   });
 });
+
+describe("touch across a reset", () => {
+  it("keeps the real best bid and ask through a grouping change, so tags never show grouped prices", () => {
+    const e = createEngine({ gridTick: 10 });
+    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 1)], asks: [lvl("110.0", 1)], time: 0, rx: 1 });
+    e.apply({ _tag: "bbo", bid: lvl("104.0", 2), ask: lvl("105.0", 3), time: 0, rx: 2 });
+    expect([e.snapshot().bestBid?.px, e.snapshot().bestAsk?.px]).toEqual([1040, 1050]);
+    e.reset({ gridTick: 50, keepTouch: true });
+    const after = e.snapshot();
+    expect([after.bestBid?.px, after.bestAsk?.px], "aggregation does not move the touch").toEqual([1040, 1050]);
+    expect(after.bids, "the ladder itself still starts empty").toEqual([]);
+  });
+
+  it("forgets the touch when the coin changes", () => {
+    const e = createEngine({ gridTick: 10 });
+    e.apply({ _tag: "bbo", bid: lvl("104.0", 2), ask: lvl("105.0", 3), time: 0, rx: 2 });
+    e.reset({ gridTick: 10 });
+    expect(e.snapshot().bestBid).toBeUndefined();
+  });
+});

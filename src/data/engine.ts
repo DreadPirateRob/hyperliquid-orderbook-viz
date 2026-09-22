@@ -232,9 +232,11 @@ class BookEngine implements Engine {
     this.gridTick = config.gridTick;
     this.sides.bid.length = 0;
     this.sides.ask.length = 0;
-    this.bestBid = undefined;
-    this.bestAsk = undefined;
-    this.lastTrade = undefined;
+    if (config.keepTouch !== true) {
+      this.bestBid = undefined;
+      this.bestAsk = undefined;
+      this.lastTrade = undefined;
+    }
     this.lastFastRx = 0;
     this.lastSlowRx = 0;
     this.events = [];

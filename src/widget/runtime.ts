@@ -146,7 +146,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       decade = Math.floor(Math.log10(event.market.mark));
       const sameCoin = market?.coin === event.market.coin;
       market = event.market;
-      engine.reset({ gridTick, scale });
+      engine.reset({ gridTick, scale, keepTouch: sameCoin });
       sampler.reset(sameCoin ? "grid" : "coin");
       if (!sameCoin) lastFrame = undefined;
       return;
@@ -189,7 +189,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         groupOptions = Grouping.deriveOptions(mid, scale);
         gridTick = Grouping.gridTickFor(mid, market.precision, scale);
         groupLabel = groupOptions.find((o) => o.gridTick === gridTick)?.label ?? "–";
-        engine.reset({ gridTick, scale });
+        engine.reset({ gridTick, scale, keepTouch: true });
         sampler.reset("grid");
       }
     }

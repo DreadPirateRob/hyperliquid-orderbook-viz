@@ -247,3 +247,18 @@ describe("reset scope", () => {
     expect(f?.lastTrade).toBeUndefined();
   });
 });
+
+describe("touch provenance", () => {
+  it("marks the touch raw only when the BBO supplied both sides", () => {
+    const s = sampler();
+    const grouped = book([lvl(1000, 1)], [lvl(1050, 1)]);
+    const withoutBbo: BookSnapshot = { ...grouped, bestBid: undefined, bestAsk: undefined };
+    const first = s.sample(input(withoutBbo), geometry, 0, 0.016);
+    expect(first?.rawTouch).toBe(false);
+    expect(first?.bestBid, "grouped bests still place the rows").toBe(1000);
+    const withBbo: BookSnapshot = { ...grouped, bestBid: lvl(1023, 1), bestAsk: lvl(1024, 1) };
+    const second = s.sample(input(withBbo), geometry, 16, 0.016);
+    expect(second?.rawTouch).toBe(true);
+    expect([second?.bestBid, second?.bestAsk]).toEqual([1023, 1024]);
+  });
+});

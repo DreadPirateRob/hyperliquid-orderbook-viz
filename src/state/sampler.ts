@@ -163,6 +163,7 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
         share,
         bestBid: b,
         bestAsk: a,
+        rawTouch: snapshot.bestBid !== undefined && snapshot.bestAsk !== undefined,
         bestBidSz: bb.sz,
         bestAskSz: aa.sz,
         midTrail,

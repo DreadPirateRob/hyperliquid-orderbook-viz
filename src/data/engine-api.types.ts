@@ -96,6 +96,12 @@ export type EngineConfig = {
   readonly gridTick: number;
   /** Price scale, needed to price execution cost in quote units. */
   readonly scale?: PriceScale | undefined;
+  /**
+   * Keep the BBO touch across the reset. Aggregation does not change where
+   * the real best bid and ask are, so a grouping change must not throw them
+   * away — otherwise the book briefly reports grouped bests as the touch.
+   */
+  readonly keepTouch?: boolean;
 };
 
 /** The engine's pull API. */
