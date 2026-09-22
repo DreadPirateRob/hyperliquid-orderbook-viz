@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: None (can start immediately)
 
 - [ ] Vite 8 + React 19 + TS strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`) + Vitest + fast-check + Zod 4 + oxlint; scripts `dev/build/lint/typecheck/test/bench`
