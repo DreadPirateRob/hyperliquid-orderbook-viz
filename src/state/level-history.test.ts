@@ -14,7 +14,7 @@ function ev(kind: LevelEvent["kind"], px: number, from: number, to: number): Lev
 
 describe("level history", () => {
   it("springs the shown size toward the live size with k=180, c=24", () => {
-    const h = createLevelHistory({ reducedMotion: false });
+    const h = createLevelHistory({ reducedMotion: () => false });
     h.applyLevelEvents([ev("added", 1000, 0, 10)], 0);
     const r0 = h.get("bid", tick(1000));
     expect(r0?.shown).toBe(0);
@@ -32,7 +32,7 @@ describe("level history", () => {
   });
 
   it("records ghost with the lost width, grew flash, and fills from trades", () => {
-    const h = createLevelHistory({ reducedMotion: false });
+    const h = createLevelHistory({ reducedMotion: () => false });
     h.applyLevelEvents([ev("added", 1000, 0, 10)], 0);
     h.applyLevelEvents([ev("shrank", 1000, 10, 4)], 100);
     const r = h.get("bid", tick(1000));
@@ -53,7 +53,7 @@ describe("level history", () => {
   });
 
   it("caps pulses at six, prunes them after 1.5 s, and forgets dead levels after 60 s", () => {
-    const h = createLevelHistory({ reducedMotion: false });
+    const h = createLevelHistory({ reducedMotion: () => false });
     h.applyLevelEvents([ev("added", 1000, 0, 1)], 0);
     for (let i = 0; i < 10; i++) h.applyLevelEvents([ev("grew", 1000, i, i + 1)], 10 + i);
     expect(h.get("bid", tick(1000))?.pulses.length).toBe(6);
@@ -67,7 +67,7 @@ describe("level history", () => {
   });
 
   it("keeps firstSeen across size changes and resets it when a level returns from zero", () => {
-    const h = createLevelHistory({ reducedMotion: false });
+    const h = createLevelHistory({ reducedMotion: () => false });
     h.applyLevelEvents([ev("added", 1000, 0, 1)], 0);
     h.applyLevelEvents([ev("grew", 1000, 1, 5)], 5000);
     expect(h.get("bid", tick(1000))?.first).toBe(0);
@@ -77,8 +77,18 @@ describe("level history", () => {
     expect(h.get("bid", tick(1000))?.first).toBe(10_000);
   });
 
+  it("a level returning during its ghost fade keeps the ghost width (prev untouched on add, as v4)", () => {
+    const h = createLevelHistory({ reducedMotion: () => false });
+    h.applyLevelEvents([ev("added", 1000, 0, 10)], 0);
+    h.applyLevelEvents([ev("vanished", 1000, 10, 0)], 100);
+    h.applyLevelEvents([ev("added", 1000, 0, 3)], 200);
+    const r = h.get("bid", tick(1000));
+    expect(r?.prev).toBe(10);
+    expect(r?.live).toBe(3);
+  });
+
   it("outOfWindow drops the level silently: size to zero, no pulse", () => {
-    const h = createLevelHistory({ reducedMotion: false });
+    const h = createLevelHistory({ reducedMotion: () => false });
     h.applyLevelEvents([ev("added", 1000, 0, 1)], 0);
     h.applyLevelEvents([ev("outOfWindow", 1000, 1, 0)], 10);
     const r = h.get("bid", tick(1000));
@@ -87,11 +97,11 @@ describe("level history", () => {
   });
 
   it("reduced motion snaps sizes and records no pulses; snap() settles everything", () => {
-    const h = createLevelHistory({ reducedMotion: true });
+    const h = createLevelHistory({ reducedMotion: () => true });
     h.applyLevelEvents([ev("added", 1000, 0, 10)], 0);
     expect(h.get("bid", tick(1000))?.shown).toBe(10);
     expect(h.get("bid", tick(1000))?.pulses).toEqual([]);
-    const live = createLevelHistory({ reducedMotion: false });
+    const live = createLevelHistory({ reducedMotion: () => false });
     live.applyLevelEvents([ev("added", 1000, 0, 10)], 0);
     live.snap();
     expect(live.get("bid", tick(1000))?.shown).toBe(10);

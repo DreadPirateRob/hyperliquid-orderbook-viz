@@ -74,8 +74,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let gridTick = 1;
   let groupLabel = "–";
   const engine: Engine = createEngine({ gridTick });
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }));
+  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const reducedMotion = (): boolean => reducedMotionQuery.matches;
+  const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }), { reducedMotion });
   let width = 0;
   let height = 0;
   let lastT = performance.now();
@@ -140,14 +141,12 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     ctx.fillRect(0, 0, width, height);
     const events = engine.drain();
     const trades = engine.drainTrades();
+    const settle = snapPending;
+    snapPending = false;
     const S =
       scale === undefined
         ? undefined
-        : sampler.sample({ snapshot, events, trades }, { height, gridTick, ruler: state.ruler }, t, dt);
-    if (snapPending) {
-      snapPending = false;
-      sampler.snap();
-    }
+        : sampler.sample({ snapshot, events, trades, settle }, { height, gridTick, ruler: state.ruler }, t, dt);
     if (S !== undefined && scale !== undefined) {
       drawLadder(
         {

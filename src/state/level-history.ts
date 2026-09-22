@@ -39,8 +39,8 @@ export type LevelState = {
 
 /** Options fixed at construction. */
 export type LevelHistoryOptions = {
-  /** OS reduced-motion preference: springs snap, pulses are not recorded. */
-  readonly reducedMotion: boolean;
+  /** OS reduced-motion preference, read at each change: springs snap, pulses are not recorded. */
+  readonly reducedMotion: () => boolean;
 };
 
 /** The store. */
@@ -94,15 +94,14 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
     return e;
   };
   const pulse = (e: Entry, kind: Pulse["kind"], t: number): void => {
-    if (options.reducedMotion) return;
+    if (options.reducedMotion()) return;
     e.pulses.push({ kind, t0: t });
     if (e.pulses.length > PULSE_CAP) e.pulses.shift();
   };
   const setSize = (e: Entry, size: number, t: number): void => {
-    e.prev = e.live;
     e.live = size;
     e.lastChanged = t;
-    if (options.reducedMotion) e.spring.snap(size);
+    if (options.reducedMotion()) e.spring.snap(size);
     else e.spring.target = size;
   };
   const view = (e: Entry): LevelState => ({
@@ -122,20 +121,24 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
         const e = rec(ev.side, ev.px, t);
         switch (ev.kind) {
           case "added":
+            // v4 leaves `prev` alone on add so a ghost from a vanish keeps its width if the level returns mid-fade.
             if (e.live === 0 && e.spring.x < 1e-9) e.first = t;
             setSize(e, ev.to, t);
             pulse(e, "add", t);
             break;
           case "grew":
+            e.prev = e.live;
             setSize(e, ev.to, t);
             pulse(e, "grew", t);
             break;
           case "shrank":
           case "vanished":
+            e.prev = e.live;
             setSize(e, ev.to, t);
             pulse(e, ev.consumed > 0 ? "fill" : "ghost", t);
             break;
           case "outOfWindow":
+            e.prev = e.live;
             setSize(e, 0, t);
             break;
           case "migrated":

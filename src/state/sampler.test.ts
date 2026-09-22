@@ -19,10 +19,12 @@ function book(bids: ReadonlyArray<Level>, asks: ReadonlyArray<Level>, version = 
 }
 const geometry = { height: ROW * 10, gridTick: 10, ruler: 3 };
 function input(snapshot: BookSnapshot): FrameInput {
-  return { snapshot, events: [], trades: [] };
+  return { snapshot, events: [], trades: [], settle: false };
 }
-function sampler() {
-  return createSampler(createLevelHistory({ reducedMotion: false }));
+function sampler(reducedMotion = false) {
+  return createSampler(createLevelHistory({ reducedMotion: () => reducedMotion }), {
+    reducedMotion: () => reducedMotion,
+  });
 }
 
 describe("sampler", () => {
@@ -116,7 +118,12 @@ describe("sampler with motion", () => {
   it("springs a row's shown size and carries pulses; animation state follows the price across a re-centre", () => {
     const s = sampler();
     let snap = book([lvl(1000, 8)], [lvl(1010, 1)]);
-    let f = s.sample({ snapshot: snap, events: [ev("added", 1000, 0, 8)], trades: [] }, geometry, 0, 0.016);
+    let f = s.sample(
+      { snapshot: snap, events: [ev("added", 1000, 0, 8)], trades: [], settle: false },
+      geometry,
+      0,
+      0.016,
+    );
     const row0 = f?.rows.find((r) => r.px === 1000);
     expect(row0?.shown).toBeLessThan(1);
     expect(row0?.live).toBe(8);
@@ -125,7 +132,12 @@ describe("sampler with motion", () => {
     expect(f?.rows.find((r) => r.px === 1000)?.shown).toBe(8);
     // mid jumps 30 ticks: the anchor retargets; the level's state is looked up by price, not by row index
     snap = book([lvl(1030, 8), lvl(1000, 8)], [lvl(1040, 1)]);
-    f = s.sample({ snapshot: snap, events: [ev("added", 1030, 0, 8)], trades: [] }, geometry, 2000, 0.016);
+    f = s.sample(
+      { snapshot: snap, events: [ev("added", 1030, 0, 8)], trades: [], settle: false },
+      geometry,
+      2000,
+      0.016,
+    );
     for (let i = 1; i <= 600; i++) f = s.sample(input(snap), geometry, 2000 + i * 16, 0.016);
     const moved = f?.rows.find((r) => r.px === 1000);
     expect(moved?.shown).toBe(8);
@@ -138,7 +150,7 @@ describe("sampler with motion", () => {
     const snap = book([lvl(1000, 1)], [lvl(1010, 1)]);
     s.sample(input(snap), geometry, 0, 0.016);
     let f = s.sample(
-      { snapshot: snap, events: [], trades: [{ px: tick(1010), sz: 1, side: "B", time: 0 }] },
+      { snapshot: snap, events: [], trades: [{ px: tick(1010), sz: 1, side: "B", time: 0 }], settle: false },
       geometry,
       100,
       0.016,
@@ -146,5 +158,29 @@ describe("sampler with motion", () => {
     expect(f?.rows.find((r) => r.px === 1010)?.pulses).toEqual([{ kind: "fill", t0: 100 }]);
     f = s.sample(input(snap), geometry, 100 + 1600, 0.016);
     expect(f?.rows.find((r) => r.px === 1010)?.pulses).toEqual([]);
+  });
+});
+
+describe("settling and reduced motion", () => {
+  it("settle folds the backlog, then lays rows with springs at target and no pulses", () => {
+    const s = sampler();
+    const snap = book([lvl(1000, 8)], [lvl(1010, 1)]);
+    const f = s.sample(
+      { snapshot: snap, events: [ev("added", 1000, 0, 8)], trades: [], settle: true },
+      geometry,
+      0,
+      0.016,
+    );
+    const row = f?.rows.find((r) => r.px === 1000);
+    expect(row?.shown).toBe(8);
+    expect(row?.pulses).toEqual([]);
+    expect(s.moving()).toBe(false);
+  });
+
+  it("reduced motion snaps the anchor on re-centre", () => {
+    const s = sampler(true);
+    s.sample(input(book([lvl(1000, 1)], [lvl(1010, 1)])), geometry, 0, 0.016);
+    const f = s.sample(input(book([lvl(1020, 1)], [lvl(1030, 1)])), geometry, 16, 0.016);
+    expect(f?.rows[0]?.px).toBe(1080);
   });
 });

@@ -1,3 +1,4 @@
+import * as fc from "fast-check";
 import { readFileSync, readdirSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
@@ -200,5 +201,48 @@ describe("window authority", () => {
     e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 1)], asks: [], time: 0, rx });
     e.reset({ gridTick: 100 });
     expect(e.snapshot()).toMatchObject({ bids: [], asks: [], connection: "RESYNCING" });
+  });
+});
+
+function sideArb(dir: 1 | -1): fc.Arbitrary<ReadonlyArray<Level>> {
+  return fc
+    .uniqueArray(fc.integer({ min: 1, max: 60 }), { minLength: 0, maxLength: 20 })
+    .chain((pxs) =>
+      fc.tuple(
+        fc.constant(pxs),
+        fc.array(fc.double({ min: 0.001, max: 100, noNaN: true }), { minLength: pxs.length, maxLength: pxs.length }),
+      ),
+    )
+    .map(([pxs, szs]) => pxs.map((p, i) => lvl(`${p * 10}.0`, szs[i] ?? 1)).toSorted((a, b) => (b.px - a.px) * dir));
+}
+const sum = (ls: ReadonlyArray<Level>): number => ls.reduce((acc, l) => acc + l.sz, 0);
+
+describe("diff property", () => {
+  const bookArb = fc.tuple(sideArb(1), sideArb(-1));
+
+  it("applying events to the old book reconstructs the new one, and events sum to the size diff", () => {
+    fc.assert(
+      fc.property(bookArb, bookArb, ([bids0, asks0], [bids1, asks1]) => {
+        const e = createEngine({ gridTick: 10 });
+        e.apply({ _tag: "l2Book", stream: "slow", bids: bids0, asks: asks0, time: 0, rx: 1 });
+        e.drain();
+        e.apply({ _tag: "l2Book", stream: "slow", bids: bids1, asks: asks1, time: 0, rx: 2 });
+        const events = e.drain();
+        const rebuilt: Record<"bid" | "ask", Map<number, number>> = { bid: new Map(), ask: new Map() };
+        for (const l of bids0) rebuilt.bid.set(l.px, l.sz);
+        for (const l of asks0) rebuilt.ask.set(l.px, l.sz);
+        let delta = 0;
+        for (const ev of events) {
+          expect(rebuilt[ev.side].get(ev.px) ?? 0).toBe(ev.from);
+          if (ev.to === 0) rebuilt[ev.side].delete(ev.px);
+          else rebuilt[ev.side].set(ev.px, ev.to);
+          delta += ev.to - ev.from;
+        }
+        const s = e.snapshot();
+        expect([...rebuilt.bid.entries()].toSorted((a, b) => b[0] - a[0])).toEqual(s.bids.map((l) => [l.px, l.sz]));
+        expect([...rebuilt.ask.entries()].toSorted((a, b) => a[0] - b[0])).toEqual(s.asks.map((l) => [l.px, l.sz]));
+        expect(delta).toBeCloseTo(sum(bids1) + sum(asks1) - sum(bids0) - sum(asks0), 6);
+      }),
+    );
   });
 });

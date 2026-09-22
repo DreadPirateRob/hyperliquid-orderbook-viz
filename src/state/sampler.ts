@@ -35,6 +35,14 @@ export type FrameInput = {
   readonly snapshot: BookSnapshot;
   readonly events: ReadonlyArray<LevelEvent>;
   readonly trades: ReadonlyArray<Trade>;
+  /** Fold the changes, then settle every spring and drop pulses before laying rows (tab return). */
+  readonly settle: boolean;
+};
+
+/** Sampler options. */
+export type SamplerOptions = {
+  /** OS reduced-motion preference, read per frame: the anchor snaps instead of gliding. */
+  readonly reducedMotion: () => boolean;
 };
 
 /** The state layer's sampler. */
@@ -43,8 +51,6 @@ export type Sampler = {
   readonly sample: (input: FrameInput, geometry: SampleGeometry, t: number, dt: number) => FrameSample | undefined;
   /** Forget anchor and history (coin/grouping change). */
   readonly reset: () => void;
-  /** Settle all motion (tab return). */
-  readonly snap: () => void;
   /** True while anything is still animating. */
   readonly moving: () => boolean;
 };
@@ -53,16 +59,21 @@ export type Sampler = {
  * Create a sampler with an unset anchor.
  *
  * @param history - The per-level animation store the sampler drives.
+ * @param options - Motion preferences.
  * @returns A sampler.
  */
-export function createSampler(history: LevelHistory): Sampler {
+export function createSampler(history: LevelHistory, options: SamplerOptions): Sampler {
   const anchor = new Spring(0, ANCHOR_K, ANCHOR_C);
   let anchorSet = false;
   return {
-    sample: ({ snapshot, events, trades }, geometry, t, dt) => {
+    sample: ({ snapshot, events, trades, settle }, geometry, t, dt) => {
       history.applyLevelEvents(events, t);
       history.applyTrades(trades, t);
       history.step(t, dt);
+      if (settle) {
+        history.snap();
+        anchor.snap(anchor.target);
+      }
       const gb = snapshot.bids[0];
       const ga = snapshot.asks[0];
       if (gb === undefined || ga === undefined) return undefined;
@@ -78,7 +89,10 @@ export function createSampler(history: LevelHistory): Sampler {
       const rows = Math.floor(geometry.height / ROW);
       const half = Math.floor(rows / 2);
       const grid = geometry.gridTick;
-      if (Math.abs(mid - anchor.target) > grid * half * RECENTRE_FRACTION) anchor.target = mid;
+      if (Math.abs(mid - anchor.target) > grid * half * RECENTRE_FRACTION) {
+        if (options.reducedMotion()) anchor.snap(mid);
+        else anchor.target = mid;
+      }
       const centre = anchor.step(dt);
       // Rows below zero are impossible prices; the top row is at least (rows − 1) grid steps so no row goes negative.
       const top = Math.max((rows - 1) * grid, Math.round(centre / grid) * grid + half * grid);
@@ -115,10 +129,6 @@ export function createSampler(history: LevelHistory): Sampler {
     reset: () => {
       anchorSet = false;
       history.clear();
-    },
-    snap: () => {
-      anchor.snap(anchor.target);
-      history.snap();
     },
     moving: () => anchor.moving || history.moving(),
   };
