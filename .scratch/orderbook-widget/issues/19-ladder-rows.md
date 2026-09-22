@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 18
 
 - [ ] Fixture reader + socket adapter implement one feed-source contract; errors as tagged values
