@@ -3,6 +3,7 @@ import type { FrameSample } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
 import * as Tick from "../domain/tick";
 import { drawLadder } from "./ladder";
+import { drawSpine } from "./spine";
 
 /**
  * The renderer's only observable output is the sequence of canvas calls, so
@@ -135,6 +136,64 @@ function draw(lastPx: number): Call[] {
   );
   return calls;
 }
+
+function drawSpineCalls(lastPx: number): Call[] {
+  const calls: Call[] = [];
+  const ctx = recordingContext(calls);
+  drawSpine(
+    {
+      ctx,
+      width: 1500,
+      height: 6 * ROW,
+      scale: scale(),
+      gridTick: 10,
+      trailsOn: false,
+      tapeOn: false,
+      overlaysOn: false,
+    },
+    frame(lastPx),
+  );
+  return calls;
+}
+
+describe("spine tag alignment", () => {
+  it("puts the pill text on the tagged row's line and its box on that row's band", () => {
+    const calls = drawSpineCalls(855460);
+    const pillText = calls.find(
+      (c): c is Extract<Call, { op: "fillText" }> => c.op === "fillText" && c.text.includes("85546.0"),
+    );
+    const box = calls.find((c): c is Extract<Call, { op: "roundRect" }> => c.op === "roundRect");
+    const rowCentre = 4 * ROW + ROW / 2;
+    expect(pillText?.y).toBe(rowCentre);
+    expect(box?.y).toBe(4 * ROW + 2);
+    expect(box?.h).toBe(18);
+  });
+
+  it("right-aligns the pill at cx + 30 so it covers the centred row price (v4 ribbon1)", () => {
+    const calls = drawSpineCalls(855460);
+    const pillText = calls.find(
+      (c): c is Extract<Call, { op: "fillText" }> => c.op === "fillText" && c.text.includes("85546.0"),
+    );
+    const rowPrice = calls.find(
+      (c): c is Extract<Call, { op: "fillText" }> => c.op === "fillText" && c.text === "85546",
+    );
+    const cx = Math.round(1500 / 2);
+    expect(pillText?.x).toBe(cx + 30 - 1);
+    // the row price is centred on the spine, so the right-aligned pill must start left of its left edge
+    const priceHalfWidth = ("85546".length * 7.2) / 2;
+    const pillWidth = "▼ 85546.0".length * 7.2 + 10;
+    expect(cx + 30 + 4 - pillWidth).toBeLessThan((rowPrice?.x ?? 0) - priceHalfWidth);
+  });
+
+  it("draws row prices on row centres", () => {
+    const calls = drawSpineCalls(855460);
+    const labels = calls.filter(
+      (c): c is Extract<Call, { op: "fillText" }> => c.op === "fillText" && /^8554\d$/.test(c.text),
+    );
+    expect(labels.length).toBeGreaterThan(2);
+    expect(labels.every((l) => l.y % ROW === ROW / 2)).toBe(true);
+  });
+});
 
 describe("last-trade tag alignment", () => {
   it("draws the pill's text on the row's text line and its box on the row's rectangle band", () => {

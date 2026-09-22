@@ -156,7 +156,9 @@ function drawSpineBoundary(ctx: CanvasRenderingContext2D, S: FrameSample, cx: nu
     last === undefined
       ? Tick.formatMid(S.mid, d.scale)
       : `${last.dir > 0 ? "▲ " : last.dir < 0 ? "▼ " : ""}${Tick.format(last.px, d.scale)}`;
-  pill(ctx, lbl, cx + 30, ty, "center", rgba(colour, 0.95));
+  // v4's ribbon1 always right-aligns the tag at its anchor (it ignores the `pxAlign` it is handed),
+  // so the pill ends at cx + 30 and covers the centred row price rather than leaving digits exposed.
+  pill(ctx, lbl, cx + 30, ty, "right", rgba(colour, 0.95));
   const bx = cx - 300;
   const bw = 10;
   const H = 44;
