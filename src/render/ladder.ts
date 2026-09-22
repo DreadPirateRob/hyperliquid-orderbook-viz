@@ -435,7 +435,7 @@ function drawRuler(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayou
     const edgeY = k === 0 ? yy : yy - ROW;
     const rr = S.rows.find((r) => r.y === edgeY);
     if (rr !== undefined && rr.cum > 0)
-      text(ctx, `cum ${formatSize(rr.cum)}`, X.block + X.blockW + 8, yy + (k === 0 ? 8 : -8), PALETTE.dim);
+      text(ctx, `Σ ${formatSize(rr.cum)}`, X.block + X.blockW + 8, yy + (k === 0 ? 8 : -8), PALETTE.dim);
   }
 }
 
