@@ -1,7 +1,8 @@
-import type { BookSnapshot } from "../data/engine-api.types";
-import type { Level } from "../data/feed-events.types";
+import type { BookSnapshot, LevelEvent } from "../data/engine-api.types";
+import type { Level, Trade } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
 import type { FrameRow, FrameSample } from "./frame-sample.types";
+import type { LevelHistory } from "./level-history";
 import { Spring } from "./spring";
 
 /**
@@ -29,12 +30,21 @@ export type SampleGeometry = {
   readonly ruler: number;
 };
 
+/** What changed since the last frame, drained from the engine. */
+export type FrameInput = {
+  readonly snapshot: BookSnapshot;
+  readonly events: ReadonlyArray<LevelEvent>;
+  readonly trades: ReadonlyArray<Trade>;
+};
+
 /** The state layer's sampler. */
 export type Sampler = {
-  /** Produce a frame, or nothing until both sides have a best. */
-  readonly sample: (snapshot: BookSnapshot, geometry: SampleGeometry, t: number, dt: number) => FrameSample | undefined;
-  /** Forget the anchor (coin/grouping change). */
+  /** Fold the frame's changes into the history and produce a frame, or nothing until both sides have a best. */
+  readonly sample: (input: FrameInput, geometry: SampleGeometry, t: number, dt: number) => FrameSample | undefined;
+  /** Forget anchor and history (coin/grouping change). */
   readonly reset: () => void;
+  /** Settle all motion (tab return). */
+  readonly snap: () => void;
   /** True while anything is still animating. */
   readonly moving: () => boolean;
 };
@@ -42,13 +52,17 @@ export type Sampler = {
 /**
  * Create a sampler with an unset anchor.
  *
+ * @param history - The per-level animation store the sampler drives.
  * @returns A sampler.
  */
-export function createSampler(): Sampler {
+export function createSampler(history: LevelHistory): Sampler {
   const anchor = new Spring(0, ANCHOR_K, ANCHOR_C);
   let anchorSet = false;
   return {
-    sample: (snapshot, geometry, t, dt) => {
+    sample: ({ snapshot, events, trades }, geometry, t, dt) => {
+      history.applyLevelEvents(events, t);
+      history.applyTrades(trades, t);
+      history.step(t, dt);
       const gb = snapshot.bids[0];
       const ga = snapshot.asks[0];
       if (gb === undefined || ga === undefined) return undefined;
@@ -68,7 +82,7 @@ export function createSampler(): Sampler {
       const centre = anchor.step(dt);
       // Rows below zero are impossible prices; the top row is at least (rows − 1) grid steps so no row goes negative.
       const top = Math.max((rows - 1) * grid, Math.round(centre / grid) * grid + half * grid);
-      const out = layRows(rows, top, grid, b, a, snapshot, t);
+      const out = layRows(rows, top, grid, b, a, snapshot, history, t);
       const midIdx = out.findIndex((r) => r.px < mid);
       const ribY = midIdx === -1 ? rows * ROW : midIdx * ROW;
       accumulate(out, midIdx, geometry.ruler);
@@ -100,14 +114,19 @@ export function createSampler(): Sampler {
     },
     reset: () => {
       anchorSet = false;
+      history.clear();
     },
-    moving: () => anchor.moving,
+    snap: () => {
+      anchor.snap(anchor.target);
+      history.snap();
+    },
+    moving: () => anchor.moving || history.moving(),
   };
 }
 
 type MutableRow = { -readonly [K in keyof FrameRow]: FrameRow[K] };
 
-function layRows(count: number, top: number, grid: number, b: Tick, a: Tick, snapshot: BookSnapshot, t: number): MutableRow[] {
+function layRows(count: number, top: number, grid: number, b: Tick, a: Tick, snapshot: BookSnapshot, history: LevelHistory, t: number): MutableRow[] {
   const bids = indexByPx(snapshot.bids);
   const asks = indexByPx(snapshot.asks);
   const out: MutableRow[] = [];
@@ -117,7 +136,21 @@ function layRows(count: number, top: number, grid: number, b: Tick, a: Tick, sna
     const side = px >= a ? "ask" : px <= b ? "bid" : "spread";
     const level = side === "ask" ? asks.get(px) : side === "bid" ? bids.get(px) : undefined;
     const live = level?.sz ?? 0;
-    out.push({ i, y: i * ROW, px, side, shown: live, live, cum: 0, inRuler: false, field: 0, pulses: EMPTY, first: t });
+    const h = side === "spread" ? undefined : history.get(side, px);
+    out.push({
+      i,
+      y: i * ROW,
+      px,
+      side,
+      shown: h?.shown ?? live,
+      live,
+      prev: h?.prev ?? live,
+      cum: 0,
+      inRuler: false,
+      field: 0,
+      pulses: h?.pulses ?? EMPTY,
+      first: h?.first ?? t,
+    });
   }
   return out;
 }

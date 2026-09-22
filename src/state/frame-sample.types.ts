@@ -25,6 +25,8 @@ export type FrameRow = {
   readonly shown: number;
   /** Size the engine currently reports. */
   readonly live: number;
+  /** Size before the last change; ghost width = prev − live. */
+  readonly prev: number;
   readonly cum: number;
   readonly inRuler: boolean;
   /** Size-delta field value (ADR 0005). */

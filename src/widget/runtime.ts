@@ -6,6 +6,7 @@ import type { PriceScale } from "../domain/tick";
 import * as Tick from "../domain/tick";
 import { drawLadder } from "../render/ladder";
 import { PALETTE } from "../render/palette";
+import { createLevelHistory } from "../state/level-history";
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
 import type { ConnectionState } from "../data/engine-api.types";
@@ -73,7 +74,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let gridTick = 1;
   let groupLabel = "–";
   const engine: Engine = createEngine({ gridTick });
-  const sampler: Sampler = createSampler();
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }));
   let width = 0;
   let height = 0;
   let lastT = performance.now();
@@ -112,6 +114,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     engine.apply(event);
   });
   const hostTick = setInterval(() => engine.apply({ _tag: "tick", rx: Date.now() }), HOST_TICK_MS);
+  // Returning to a hidden tab: fold what queued, then settle rather than replay minutes of motion.
+  const onVisibility = (): void => {
+    if (document.visibilityState !== "visible") return;
+    sampler.snap();
+    lastT = performance.now();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
 
   const frame = (): void => {
     if (disposed) return;
@@ -128,7 +137,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     lastVersion = snapshot.version;
     ctx.fillStyle = PALETTE.bg;
     ctx.fillRect(0, 0, width, height);
-    const S = scale === undefined ? undefined : sampler.sample(snapshot, { height, gridTick, ruler: state.ruler }, t, dt);
+    const events = engine.drain();
+    const trades = engine.drainTrades();
+    const S = scale === undefined ? undefined : sampler.sample({ snapshot, events, trades }, { height, gridTick, ruler: state.ruler }, t, dt);
     if (S !== undefined && scale !== undefined) {
       drawLadder({ ctx, width, height, scale, gridTick, trailsOn: state.trailsOn, tapeOn: state.tapeOn, overlaysOn: state.overlaysOn }, S);
     }
@@ -153,6 +164,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       cancelAnimationFrame(raf);
       clearInterval(hostTick);
       observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       stopFeed();
     },
   };
