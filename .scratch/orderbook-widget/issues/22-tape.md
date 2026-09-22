@@ -7,7 +7,7 @@
 **Status:** ready-for-agent
 
 Type: task
-Status: open
+Status: claimed
 Blocked by: 20
 
 - [ ] Sampler test: aggregation, cap 50, P95 threshold needs ≥ 20 prints
