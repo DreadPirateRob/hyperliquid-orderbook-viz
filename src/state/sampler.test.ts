@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BookSnapshot, LevelEvent } from "../data/engine-api.types";
-import type { Level } from "../data/feed-events.types";
+import type { Level, Trade } from "../data/feed-events.types";
 import * as Tick from "../domain/tick";
 import { createLevelHistory } from "./level-history";
 import { ROW, createSampler } from "./sampler";
@@ -182,5 +182,50 @@ describe("settling and reduced motion", () => {
     s.sample(input(book([lvl(1000, 1)], [lvl(1010, 1)])), geometry, 0, 0.016);
     const f = s.sample(input(book([lvl(1020, 1)], [lvl(1030, 1)])), geometry, 16, 0.016);
     expect(f?.rows[0]?.px).toBe(1080);
+  });
+});
+
+function tr(px: number, side: "B" | "A"): Trade {
+  return { px: tick(px), sz: 1, side, time: 0 };
+}
+
+describe("trails and last trade", () => {
+  it("samples level and touch trails every 250 ms and keeps 12 s", () => {
+    const s = sampler();
+    const snap = book([lvl(1000, 4)], [lvl(1010, 6)]);
+    let f = s.sample(
+      { snapshot: snap, events: [ev("added", 1000, 0, 4)], trades: [], settle: false },
+      geometry,
+      0,
+      0.016,
+    );
+    expect(f?.rows.find((r) => r.px === 1000)?.trail).toEqual([{ t: 0, sz: 4 }]);
+    expect(f?.midTrail).toEqual([{ t: 0, b: 1000, a: 1010, share: 0.4 }]);
+    f = s.sample(input(snap), geometry, 200, 0.016);
+    expect(f?.midTrail.length, "no new sample before 250 ms").toBe(1);
+    for (let t = 251; t <= 13_000; t += 251) f = s.sample(input(snap), geometry, t, 0.016);
+    const trail = f?.rows.find((r) => r.px === 1000)?.trail ?? [];
+    expect(trail[0]?.t).toBeGreaterThanOrEqual(13_000 - 12_000 - 251);
+    expect(trail.length).toBeGreaterThan(40);
+    expect(trail.length).toBeLessThanOrEqual(50);
+    expect(f?.midTrail.length).toBe(trail.length);
+  });
+
+  it("tracks the last print and its direction against the previous print", () => {
+    const s = sampler();
+    const snap = book([lvl(1000, 4)], [lvl(1010, 6)]);
+    let f = s.sample({ snapshot: snap, events: [], trades: [tr(1010, "B")], settle: false }, geometry, 0, 0.016);
+    expect(f?.lastTrade).toEqual({ px: 1010, dir: 0 });
+    f = s.sample({ snapshot: snap, events: [], trades: [tr(1000, "A")], settle: false }, geometry, 16, 0.016);
+    expect(f?.lastTrade).toEqual({ px: 1000, dir: -1 });
+    f = s.sample(
+      { snapshot: snap, events: [], trades: [tr(1000, "A"), tr(1010, "B")], settle: false },
+      geometry,
+      32,
+      0.016,
+    );
+    expect(f?.lastTrade).toEqual({ px: 1010, dir: 1 });
+    expect(f?.bestBidSz).toBe(4);
+    expect(f?.bestAskSz).toBe(6);
   });
 });

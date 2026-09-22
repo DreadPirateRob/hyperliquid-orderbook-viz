@@ -13,6 +13,20 @@ export type Pulse = {
   readonly t0: number;
 };
 
+/** One trail sample: the level's live size at frame time `t`. */
+export type TrailSample = {
+  readonly t: number;
+  readonly sz: number;
+};
+
+/** One sample of the touch: best bid/ask ticks and bid share at frame time `t`. */
+export type MidSample = {
+  readonly t: number;
+  readonly b: Tick;
+  readonly a: Tick;
+  readonly share: number;
+};
+
 /** One ladder row, top to bottom. */
 export type FrameRow = {
   readonly i: number;
@@ -32,6 +46,8 @@ export type FrameRow = {
   readonly pulses: ReadonlyArray<Pulse>;
   /** When the level first appeared, for persistence saturation. */
   readonly first: number;
+  /** Size over the last 12 s, oldest first. */
+  readonly trail: ReadonlyArray<TrailSample>;
 };
 
 /** The whole frame. */
@@ -51,4 +67,10 @@ export type FrameSample = {
   readonly share: number;
   readonly bestBid: Tick;
   readonly bestAsk: Tick;
+  readonly bestBidSz: number;
+  readonly bestAskSz: number;
+  /** Touch history over the trails window, oldest first. */
+  readonly midTrail: ReadonlyArray<MidSample>;
+  /** Last print and its direction relative to the print before it. */
+  readonly lastTrade: { readonly px: Tick; readonly dir: -1 | 0 | 1 } | undefined;
 };

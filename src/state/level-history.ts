@@ -2,7 +2,7 @@ import type { LevelEvent } from "../data/engine-api.types";
 import type { Side, Trade } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
 import { casesHandled } from "../shared/result";
-import type { Pulse } from "./frame-sample.types";
+import type { Pulse, TrailSample } from "./frame-sample.types";
 import { Spring } from "./spring";
 
 /**
@@ -20,6 +20,8 @@ const PULSE_TTL_MS = 1500;
 const PULSE_CAP = 6;
 /** A level at zero with nothing playing is forgotten after this long. */
 const DEAD_MS = 60_000;
+/** Trails keep this much history (v4 `TRAIL_MS`). */
+const TRAIL_MS = 12_000;
 
 /** One level's animation state as seen by the sampler. */
 export type LevelState = {
@@ -35,6 +37,7 @@ export type LevelState = {
   /** Spring-eased size. */
   readonly shown: number;
   readonly pulses: ReadonlyArray<Pulse>;
+  readonly trail: ReadonlyArray<TrailSample>;
 };
 
 /** Options fixed at construction. */
@@ -51,6 +54,8 @@ export type LevelHistory = {
   readonly applyTrades: (trades: ReadonlyArray<Trade>, t: number) => void;
   /** Advance springs, prune pulses and dead levels. */
   readonly step: (t: number, dt: number) => void;
+  /** Record every level's live size at `t` and drop samples older than 12 s (called every `TRAIL_DT`). */
+  readonly sampleTrails: (t: number) => void;
   /** Look up one level's state. */
   readonly get: (side: Side, px: Tick) => LevelState | undefined;
   /** True while any spring or pulse is live. */
@@ -74,6 +79,7 @@ type Entry = {
   prev: number;
   readonly spring: Spring;
   pulses: Pulse[];
+  trail: TrailSample[];
 };
 
 /**
@@ -88,7 +94,17 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
     const k = key(side, px);
     let e = entries.get(k);
     if (e === undefined) {
-      e = { side, px, first: t, lastChanged: t, live: 0, prev: 0, spring: new Spring(0, SIZE_K, SIZE_C), pulses: [] };
+      e = {
+        side,
+        px,
+        first: t,
+        lastChanged: t,
+        live: 0,
+        prev: 0,
+        spring: new Spring(0, SIZE_K, SIZE_C),
+        pulses: [],
+        trail: [],
+      };
       entries.set(k, e);
     }
     return e;
@@ -113,6 +129,7 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
     prev: e.prev,
     shown: e.spring.x,
     pulses: e.pulses,
+    trail: e.trail,
   });
 
   return {
@@ -156,6 +173,14 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
         e.spring.step(dt);
         if (e.pulses.length > 0) e.pulses = e.pulses.filter((p) => t - p.t0 < PULSE_TTL_MS);
         if (e.live === 0 && t - e.lastChanged > DEAD_MS && e.pulses.length === 0) entries.delete(k);
+      }
+    },
+    sampleTrails: (t) => {
+      for (const e of entries.values()) {
+        e.trail.push({ t, sz: e.live });
+        let drop = 0;
+        while (drop < e.trail.length && (e.trail[drop]?.t ?? t) < t - TRAIL_MS) drop++;
+        if (drop > 0) e.trail.splice(0, drop);
       }
     },
     get: (side, px) => {

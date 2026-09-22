@@ -1,7 +1,7 @@
 import type { BookSnapshot, LevelEvent } from "../data/engine-api.types";
 import type { Level, Trade } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
-import type { FrameRow, FrameSample } from "./frame-sample.types";
+import type { FrameRow, FrameSample, MidSample } from "./frame-sample.types";
 import type { LevelHistory } from "./level-history";
 import { Spring } from "./spring";
 
@@ -19,6 +19,9 @@ export const ROW = 22;
 const ANCHOR_K = 40;
 const ANCHOR_C = 13;
 const RECENTRE_FRACTION = 0.3;
+/** Trail sampling (v4 `TRAIL_MS`, `TRAIL_DT`). */
+const TRAIL_MS = 12_000;
+const TRAIL_DT = 250;
 
 /** What the sampler needs from the host each frame. */
 export type SampleGeometry = {
@@ -65,10 +68,18 @@ export type Sampler = {
 export function createSampler(history: LevelHistory, options: SamplerOptions): Sampler {
   const anchor = new Spring(0, ANCHOR_K, ANCHOR_C);
   let anchorSet = false;
+  let lastTrail = -Infinity;
+  const midTrail: MidSample[] = [];
+  let lastTrade: FrameSample["lastTrade"];
   return {
     sample: ({ snapshot, events, trades, settle }, geometry, t, dt) => {
       history.applyLevelEvents(events, t);
       history.applyTrades(trades, t);
+      for (const tr of trades) {
+        const dir =
+          lastTrade === undefined || tr.px === lastTrade.px ? (lastTrade?.dir ?? 0) : tr.px > lastTrade.px ? 1 : -1;
+        lastTrade = { px: tr.px, dir };
+      }
       history.step(t, dt);
       if (settle) {
         history.snap();
@@ -82,6 +93,14 @@ export function createSampler(history: LevelHistory, options: SamplerOptions): S
       const b = bb.px;
       const a = aa.px;
       const mid = (b + a) / 2;
+      if (t - lastTrail > TRAIL_DT) {
+        lastTrail = t;
+        history.sampleTrails(t);
+        midTrail.push({ t, b, a, share: bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5 });
+        let drop = 0;
+        while (drop < midTrail.length && (midTrail[drop]?.t ?? t) < t - TRAIL_MS) drop++;
+        if (drop > 0) midTrail.splice(0, drop);
+      }
       if (!anchorSet) {
         anchor.snap(mid);
         anchorSet = true;
@@ -124,11 +143,18 @@ export function createSampler(history: LevelHistory, options: SamplerOptions): S
         share,
         bestBid: b,
         bestAsk: a,
+        bestBidSz: bb.sz,
+        bestAskSz: aa.sz,
+        midTrail,
+        lastTrade,
       };
     },
     reset: () => {
       anchorSet = false;
       history.clear();
+      midTrail.length = 0;
+      lastTrade = undefined;
+      lastTrail = -Infinity;
     },
     moving: () => anchor.moving || history.moving(),
   };
@@ -169,6 +195,7 @@ function layRows(
       field: 0,
       pulses: h?.pulses ?? EMPTY,
       first: h?.first ?? t,
+      trail: h?.trail ?? EMPTY,
     });
   }
   return out;
