@@ -49,3 +49,14 @@ export function casesHandled(unexpectedCase: never): never {
 export function shouldNeverHappen(msg?: string): never {
   throw new Error(msg ?? "Invariant violated");
 }
+
+/**
+ * Defect helper for a path that is not built yet. Every call site is a
+ * ticket in flight, never a shipped feature.
+ *
+ * @param msg - Which ticket delivers it.
+ * @throws Always.
+ */
+export function notYetImplemented(msg?: string): never {
+  throw new Error(msg ?? "Not yet implemented");
+}

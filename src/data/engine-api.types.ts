@@ -80,6 +80,11 @@ export type Metrics = {
   readonly costSell: ExecutionCost;
 };
 
+/** Engine configuration; `gridTick` gates which BBO prices may enter the book (v4 `onGrid`). */
+export type EngineConfig = {
+  readonly gridTick: number;
+};
+
 /** The engine's pull API. */
 export type Engine = {
   /** Fold one feed event into the book. */
@@ -90,6 +95,6 @@ export type Engine = {
   readonly drain: () => ReadonlyArray<LevelEvent>;
   /** Derived metrics at `notional` quote units; cached per version. */
   readonly metrics: (notional: number) => Metrics;
-  /** Forget everything; used on coin and precision change. */
-  readonly reset: () => void;
+  /** Forget everything and adopt a new grid; used on coin and precision change. Enters `RESYNCING`. */
+  readonly reset: (config: EngineConfig) => void;
 };
