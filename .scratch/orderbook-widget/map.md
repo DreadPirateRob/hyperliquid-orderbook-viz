@@ -55,6 +55,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - [Centre spine view](issues/24-spine.md): v4 drawSpine, `v` toggle, spine reclaims trails/tape columns (ADR 0009 amendment); tag geometry pinned by a recording-context test; parity gate passed.
 - [Metric overlays and HUD](issues/23-overlays-hud.md): attribution + metrics in the engine, field/resiliency/migration overlays, ref-written HUD (zero React commits, proven by Profiler); book-shape panel dropped by request; parity gate passed.
 - [Grouping and precision change](issues/25-grouping.md): subscription gate (acks, on-grid, serialised), live `select`, segment + `[ ]` + `g`, RESYNCING freeze/dim/fade, decade re-derivation; parity gate passed.
+- [Pair picker, REST stats, URL and prefs](issues/26-pairs-rest-state.md): REST universe/stats adapter skipping malformed rows, one shared TTL+429-backoff `/info` fetch, `/` pair popover, gear popover, Zod prefs + URL round-trip; `?g=` replayed through the gate and `rawTouch` gating BBO tags; parity gate passed.
 
 ## Not yet specified
 
