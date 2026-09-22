@@ -62,7 +62,7 @@ export function ladderLayout(width: number, trailsOn: boolean, tapeOn: boolean):
     };
   }
   return {
-    px: 90,
+    px: 80,
     heat: 110,
     lane: 130,
     block: 230,

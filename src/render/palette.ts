@@ -63,18 +63,19 @@ export function formatSize(sz: number): string {
 }
 
 /**
- * Top of a pill box whose glyphs line up with surrounding row text. Canvas
- * `textBaseline: "middle"` centres the em box, which sits above the visual
- * centre of digits, so a geometrically centred box reads low.
+ * Top of a pill box on a ladder row. Every rectangle in a row — heat cell,
+ * block bar, row wash — is centred on the row's geometric centre, so the pill
+ * must be too: canvas text sits ~1.2 px above that centre under
+ * `textBaseline: "middle"`, but uniformly, so matching the boxes is what reads
+ * level. Centring the pill on its glyph ink instead makes it float above the
+ * row's other rectangles.
  *
- * @param y - Row centre in CSS px (the y the row's text uses).
- * @param ascent - `actualBoundingBoxAscent` of the label.
- * @param descent - `actualBoundingBoxDescent` of the label.
+ * @param y - Row centre in CSS px.
  * @param height - Pill height in px.
  * @returns Box top in CSS px.
  */
-export function pillTop(y: number, ascent: number, descent: number, height: number): number {
-  return y + (descent - ascent) / 2 - height / 2;
+export function pillTop(y: number, height: number): number {
+  return y - height / 2;
 }
 
 /**
@@ -104,12 +105,11 @@ export function pill(
 ): void {
   ctx.font = `600 ${size}px ${FONT}`;
   ctx.textBaseline = "middle";
-  const m = ctx.measureText(label);
-  const width = m.width + 10;
+  const width = ctx.measureText(label).width + 10;
   const left = align === "right" ? x - width + 4 : align === "center" ? x - width / 2 : x;
   ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.roundRect(left, pillTop(y, m.actualBoundingBoxAscent, m.actualBoundingBoxDescent, height), width, height, 3);
+  ctx.roundRect(left, pillTop(y, height), width, height, 3);
   ctx.fill();
   const tx = align === "right" ? x - 1 : align === "center" ? x : x + 5;
   text(ctx, label, tx, y, PALETTE.bg, align === "right" ? "right" : align, size, true);
