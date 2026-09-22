@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedSource } from "../data/feed-events.types";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
 import type { Runtime, RuntimeState, RuntimeStatus } from "./runtime";
@@ -11,10 +11,18 @@ export type OrderBookProps = {
   readonly coin: string;
   /** Feed to consume; omitted means the live Hyperliquid socket. */
   readonly feed?: FeedSource;
+  /** Trails column on at mount; default on. */
+  readonly trails?: boolean;
+  /** Reports every user-driven state change so an embedder can mirror it (URL, storage). */
+  readonly onStateChange?: (state: WidgetState) => void;
 };
 
-const INITIAL_STATE: RuntimeState = {
-  trailsOn: true,
+/** The user-facing toggles the widget owns. */
+export type WidgetState = {
+  readonly trailsOn: boolean;
+};
+
+const BASE_STATE: Omit<RuntimeState, "trailsOn"> = {
   tapeOn: true,
   overlaysOn: true,
   paused: false,
@@ -36,8 +44,11 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const connRef = useRef<HTMLSpanElement>(null);
   const groupRef = useRef<HTMLSpanElement>(null);
   const runtimeRef = useRef<Runtime | null>(null);
+  const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
+  const toggleTrails = useCallback(() => setTrailsOn((on) => !on), []);
   const feedProp = props.feed;
   const coin = props.coin;
+  const onStateChange = props.onStateChange;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -59,16 +70,38 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       }
       if (rootRef.current !== null) rootRef.current.dataset["connection"] = s.connection;
     };
-    const runtime = createRuntime({ canvas, feed, state: INITIAL_STATE, onStatus });
+    const runtime = createRuntime({ canvas, feed, state: { ...BASE_STATE, trailsOn }, onStatus });
     runtimeRef.current = runtime;
     return () => {
       runtime.dispose();
       runtimeRef.current = null;
     };
+    // The runtime is created once per feed/coin; state changes go through `update` below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedProp, coin]);
 
+  useEffect(() => {
+    runtimeRef.current?.update({ ...BASE_STATE, trailsOn });
+    onStateChange?.({ trailsOn });
+  }, [trailsOn, onStateChange]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.key === "t") setTrailsOn((on) => !on);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <div className="orderbook" ref={rootRef} data-coin={coin} data-feed={feedProp === undefined ? "live" : "injected"}>
+    <div
+      className="orderbook"
+      ref={rootRef}
+      data-coin={coin}
+      data-feed={feedProp === undefined ? "live" : "injected"}
+      data-trails={trailsOn ? "1" : "0"}
+    >
       <div className="orderbook-bar">
         <span className="orderbook-pair">{coin}</span>
         <span className="orderbook-mid" ref={midRef}>
@@ -77,6 +110,9 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         <span className="orderbook-group" ref={groupRef}>
           –
         </span>
+        <button type="button" className="orderbook-toggle" aria-pressed={trailsOn} onClick={toggleTrails}>
+          trails
+        </button>
         <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
           CONNECTING
         </span>

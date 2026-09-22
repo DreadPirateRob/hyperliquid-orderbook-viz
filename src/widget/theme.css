@@ -87,3 +87,18 @@ body,
   width: 100%;
   height: 100%;
 }
+
+.orderbook-toggle {
+  background: transparent;
+  border: 1px solid #ffffff22;
+  border-radius: 4px;
+  color: var(--dim);
+  font: inherit;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.orderbook-toggle[aria-pressed="true"] {
+  color: var(--text);
+  border-color: #ffffff55;
+}
