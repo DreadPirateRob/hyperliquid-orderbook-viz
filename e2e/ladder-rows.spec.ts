@@ -106,3 +106,35 @@ test("grouping steps with the keyboard, resubscribes, and survives in the URL", 
   await expect(page).toHaveURL(/g=10/);
   await expect(options.nth(0)).toHaveAttribute("aria-pressed", "true");
 });
+
+test("the pair picker opens with /, filters, and switching coin resets and re-subscribes", async ({ page }) => {
+  await page.goto("/?coin=BTC");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-coin", "BTC");
+  await page.keyboard.press("/");
+  const picker = page.locator(".orderbook-pairpop");
+  await expect(picker).toBeVisible();
+  await expect(page.locator(".orderbook-pairrow").first()).toBeVisible({ timeout: 15_000 });
+
+  await page.locator(".orderbook-pairsearch").fill("eth");
+  const rows = page.locator(".orderbook-pairrow");
+  await expect(rows.first()).toContainText("ETH");
+  await page.keyboard.press("Enter");
+
+  await expect(picker).toHaveCount(0);
+  await expect(root).toHaveAttribute("data-coin", "ETH");
+  await expect(page).toHaveURL(/coin=ETH/);
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 25_000 });
+  await expect(page.locator(".orderbook-mid")).toHaveText(/^\d/);
+});
+
+test("escape closes the picker and returns focus to its trigger", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  // The fixture demo mounts after the recording loads, so wait for the widget before typing at it.
+  await expect(page.locator(".orderbook")).toBeVisible();
+  await page.keyboard.press("/");
+  await expect(page.locator(".orderbook-pairpop")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".orderbook-pairpop")).toHaveCount(0);
+  await expect(page.locator(".orderbook-pair")).toBeFocused();
+});
