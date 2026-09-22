@@ -123,15 +123,15 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     },
     [report],
   );
-  /** `[` and `]` walk the option list from the one in use (v4). */
+  /** `[` and `]` walk the option list from the one in use, or from the one just asked for (v4). */
   const stepGroup = useCallback(
     (direction: -1 | 1): void => {
       const list = groups.options;
-      const index = list.findIndex((o) => o.gridTick === groups.active);
+      const index = list.findIndex((o) => o.gridTick === (gridTick ?? groups.active));
       const next = list[Math.min(list.length - 1, Math.max(0, (index < 0 ? 0 : index) + direction))];
       if (next !== undefined) selectGroup(next.gridTick);
     },
-    [groups, selectGroup],
+    [groups, gridTick, selectGroup],
   );
 
   useEffect(() => {
@@ -210,7 +210,12 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         </span>
         <span className="orderbook-groupseg" role="group" aria-label="grouping">
           {groups.options.map((o) => (
-            <GroupButton key={o.gridTick} option={o} active={o.gridTick === groups.active} onSelect={selectGroup} />
+            <GroupButton
+              key={o.gridTick}
+              option={o}
+              active={o.gridTick === (gridTick ?? groups.active)}
+              onSelect={selectGroup}
+            />
           ))}
         </span>
         <button type="button" className="orderbook-toggle" aria-pressed={view === "spine"} onClick={toggleView}>

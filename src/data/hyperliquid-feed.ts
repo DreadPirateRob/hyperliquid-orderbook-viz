@@ -88,6 +88,7 @@ class Session {
       return;
     }
     const mark = meta.value.mark ?? 1;
+    this.mark = mark;
     this.scale = meta.value.scale;
     this.precision = this.options.precision ??
       Grouping.deriveOptions(mark, meta.value.scale)[0]?.precision ?? { _tag: "full" };

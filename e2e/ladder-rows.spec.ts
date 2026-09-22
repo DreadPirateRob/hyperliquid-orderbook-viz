@@ -89,3 +89,20 @@ test("the metrics panel is absent until asked for and leaves nothing behind", as
   await page.keyboard.press("m");
   await expect(page.locator(".orderbook-hud")).toHaveCount(0);
 });
+
+test("grouping steps with the keyboard, resubscribes, and survives in the URL", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+  await expect(page.locator(".orderbook-group")).toHaveText("$1");
+  const options = page.locator(".orderbook-group-option");
+  await expect(options).toHaveText(["$1", "$2", "$5", "$10", "$100"]);
+  await expect(options.nth(0)).toHaveAttribute("aria-pressed", "true");
+
+  await page.keyboard.press("]");
+  await expect(page).toHaveURL(/g=20/);
+  await expect(options.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("[");
+  await expect(page).toHaveURL(/g=10/);
+  await expect(options.nth(0)).toHaveAttribute("aria-pressed", "true");
+});
