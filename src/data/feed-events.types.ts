@@ -1,3 +1,4 @@
+import type { Precision } from "../domain/grouping";
 import type { Tick } from "../domain/tick";
 
 /**
@@ -29,14 +30,6 @@ export type Trade = {
   readonly side: "B" | "A";
   readonly time: number;
 };
-
-/**
- * Precision the book streams were subscribed with. A mantissa is only
- * meaningful together with sig-fig aggregation, so it cannot appear alone.
- */
-export type Precision =
-  | { readonly _tag: "full" }
-  | { readonly _tag: "aggregated"; readonly nSigFigs: number; readonly mantissa: number | undefined };
 
 /** A subscription identity, used to gate acknowledgements. */
 export type Subscription =
