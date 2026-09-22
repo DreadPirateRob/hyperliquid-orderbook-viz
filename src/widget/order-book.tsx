@@ -2,6 +2,10 @@ import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GroupOption } from "../domain/grouping";
 import type { FeedSource } from "../data/feed-events.types";
+import type { Fetch, MarketStats, MarketSummary } from "../data/hyperliquid-info";
+import { fetchStats, fetchUniverse } from "../data/hyperliquid-info";
+import type { PrefsStore } from "../state/prefs";
+import { PairPicker } from "./pair-picker";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
 import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
 import { createRuntime } from "./runtime";
@@ -24,6 +28,10 @@ export type OrderBookProps = {
   readonly view?: View;
   /** Reports every user-driven state change so an embedder can mirror it (URL, storage). */
   readonly onStateChange?: (state: WidgetState) => void;
+  /** Preferences store; omitted means defaults with no persistence. */
+  readonly prefs?: PrefsStore;
+  /** REST fetch; omitted uses the global one. */
+  readonly fetch?: Fetch;
 };
 
 /** Grouping options and the one in use, mirrored from the runtime for the segment. */
@@ -34,6 +42,8 @@ type GroupSummary = {
 
 /** The user-facing toggles the widget owns. */
 export type WidgetState = {
+  /** Market being watched. */
+  readonly coin: string;
   /** Chosen grouping step in raw ticks, or `undefined` while following the default. */
   readonly gridTick: number | undefined;
   readonly trailsOn: boolean;
@@ -79,16 +89,24 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const [view, setView] = useState<View>(props.view ?? "ladder");
   const [gridTick, setGridTick] = useState<number | undefined>(props.gridTick);
   const [groups, setGroups] = useState<GroupSummary>({ options: [], active: undefined });
+  const [coin, setCoin] = useState(props.coin);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [markets, setMarkets] = useState<ReadonlyArray<MarketSummary>>([]);
+  const [stats, setStats] = useState<Record<string, MarketStats>>({});
+  const [favourites, setFavourites] = useState<ReadonlyArray<string>>(props.prefs?.get().favourites ?? []);
+  const pairButtonRef = useRef<HTMLButtonElement>(null);
   const feedProp = props.feed;
-  const coin = props.coin;
+  const prefs = props.prefs;
+  const fetchFn = props.fetch ?? globalThis.fetch.bind(globalThis);
   const onStateChange = props.onStateChange;
 
   // User-driven changes notify the embedder from the handler itself, not from an effect.
   const report = useCallback(
     (next: Partial<WidgetState>): void => {
-      onStateChange?.({ trailsOn, tapeOn, overlaysOn, view, gridTick, ...next });
+      onStateChange?.({ coin, trailsOn, tapeOn, overlaysOn, view, gridTick, ...next });
     },
-    [onStateChange, trailsOn, tapeOn, overlaysOn, view, gridTick],
+    [onStateChange, coin, trailsOn, tapeOn, overlaysOn, view, gridTick],
   );
   const toggleTrails = useCallback(() => {
     setTrailsOn((on) => {
@@ -115,7 +133,37 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       return next;
     });
   }, [report]);
-  const toggleMetrics = useCallback(() => setMetricsOn((on) => !on), []);
+  const toggleMetrics = useCallback(() => {
+    setMetricsOn((on) => {
+      prefs?.set({ metricsOn: !on });
+      return !on;
+    });
+  }, [prefs]);
+  const togglePause = useCallback(() => setPaused((p) => !p), []);
+  const openPicker = useCallback(() => setPickerOpen(true), []);
+  const closePicker = useCallback(() => {
+    setPickerOpen(false);
+    pairButtonRef.current?.focus();
+  }, []);
+  const selectCoin = useCallback(
+    (next: string): void => {
+      setPickerOpen(false);
+      pairButtonRef.current?.focus();
+      if (next === coin) return;
+      // A coin change starts a fresh market: grouping follows the new default.
+      setCoin(next);
+      setGridTick(undefined);
+      report({ coin: next, gridTick: undefined });
+    },
+    [coin, report],
+  );
+  const toggleFavourite = useCallback(
+    (next: string): void => {
+      prefs?.toggleFavourite(next);
+      setFavourites(prefs?.get().favourites ?? []);
+    },
+    [prefs],
+  );
   const selectGroup = useCallback(
     (step: number): void => {
       setGridTick(step);
@@ -133,6 +181,24 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     },
     [groups, gridTick, selectGroup],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchUniverse(fetchFn).then((r) => {
+      if (!cancelled && r._tag === "ok") setMarkets(r.value);
+    });
+    const poll = (): void => {
+      void fetchStats(fetchFn).then((r) => {
+        if (!cancelled && r._tag === "ok") setStats(r.value);
+      });
+    };
+    poll();
+    const timer = setInterval(poll, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [fetchFn]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -170,8 +236,19 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   }, [feedProp, coin]);
 
   useEffect(() => {
-    runtimeRef.current?.update({ ...BASE_STATE, trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick });
-  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick]);
+    const p = prefs?.get();
+    runtimeRef.current?.update({
+      ...BASE_STATE,
+      trailsOn,
+      tapeOn,
+      overlaysOn,
+      metricsOn,
+      view,
+      gridTick,
+      paused,
+      ...(p === undefined ? {} : { cadence: p.cadence, ruler: p.ruler, notional: p.notional }),
+    });
+  }, [trailsOn, tapeOn, overlaysOn, metricsOn, view, gridTick, paused, prefs]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -183,10 +260,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       if (e.key === "m") toggleMetrics();
       if (e.key === "[") stepGroup(-1);
       if (e.key === "]") stepGroup(1);
+      if (e.key === "/") {
+        e.preventDefault();
+        openPicker();
+      }
+      if (e.key === " ") {
+        e.preventDefault();
+        togglePause();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleTrails, toggleTape, toggleView, toggleOverlays, toggleMetrics, stepGroup]);
+  }, [toggleTrails, toggleTape, toggleView, toggleOverlays, toggleMetrics, stepGroup, openPicker, togglePause]);
 
   return (
     <div
@@ -199,9 +284,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       data-overlays={overlaysOn ? "1" : "0"}
       data-metrics={metricsOn ? "1" : "0"}
       data-view={view}
+      data-paused={paused ? "1" : "0"}
     >
       <div className="orderbook-bar">
-        <span className="orderbook-pair">{coin}</span>
+        <button
+          type="button"
+          className="orderbook-pair"
+          ref={pairButtonRef}
+          onClick={openPicker}
+          aria-haspopup="dialog"
+        >
+          {markets.find((m) => m.coin === coin)?.display ?? coin}
+        </button>
         <span className="orderbook-mid" ref={midRef}>
           –
         </span>
@@ -233,10 +327,25 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         <button type="button" className="orderbook-toggle" aria-pressed={metricsOn} onClick={toggleMetrics}>
           metrics
         </button>
+        <MarketStatsBar stats={stats[coin]} />
+        <button type="button" className="orderbook-toggle" aria-pressed={paused} onClick={togglePause}>
+          {paused ? "▶" : "⏸"}
+        </button>
         <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
           CONNECTING
         </span>
       </div>
+      {pickerOpen ? (
+        <PairPicker
+          markets={markets}
+          stats={stats}
+          favourites={favourites}
+          current={coin}
+          onSelect={selectCoin}
+          onToggleFavourite={toggleFavourite}
+          onClose={closePicker}
+        />
+      ) : null}
       <canvas className="orderbook-canvas" ref={canvasRef} role="img" aria-label={`${coin} order book ladder`} />
       {metricsOn ? (
         <div className="orderbook-hud">
@@ -260,4 +369,26 @@ function GroupButton(props: {
       {option.label}
     </button>
   );
+}
+
+/** Mark, 24 h change, volume and funding for the watched market. */
+function MarketStatsBar(props: { readonly stats: MarketStats | undefined }): JSX.Element {
+  const s = props.stats;
+  if (s === undefined) return <span className="orderbook-stats" />;
+  return (
+    <span className="orderbook-stats">
+      <span>{s.mark >= 1000 ? s.mark.toFixed(0) : s.mark.toFixed(4)}</span>
+      {s.changePct === undefined ? null : (
+        <span
+          className={s.changePct >= 0 ? "up" : "dn"}
+        >{`${s.changePct >= 0 ? "+" : ""}${s.changePct.toFixed(2)}%`}</span>
+      )}
+      {s.dayVolume === undefined ? null : <span>{formatVolume(s.dayVolume)}</span>}
+      {s.funding === undefined ? null : <span>{`${(s.funding * 100).toFixed(4)}%`}</span>}
+    </span>
+  );
+}
+
+function formatVolume(volume: number): string {
+  return volume >= 1e9 ? `${(volume / 1e9).toFixed(2)}B` : `${(volume / 1e6).toFixed(1)}M`;
 }

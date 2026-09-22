@@ -3,28 +3,15 @@ import { createRoot } from "react-dom/client";
 import type { FeedSource } from "./data/feed-events.types";
 import { createFixtureFeed } from "./data/fixture-feed";
 import { loadFixture } from "./data/fixture-loader";
+import { createPrefsStore } from "./state/prefs";
+import { readUrlState, writeUrlState } from "./state/widget-url";
 import type { WidgetState } from "./widget/order-book";
 import { OrderBook } from "./widget/order-book";
 import "./widget/theme.css";
 
-/**
- * Demo composition root. `?fixture=<name>` swaps the live socket for a
- * recording under `/fixtures/`; `?speed=` sets the replay multiplier.
- */
 /** Widget params live in the URL (ADR 0008): `replaceState` only, foreign params preserved. */
 function syncUrl(state: WidgetState): void {
-  const url = new URL(location.href);
-  if (state.trailsOn) url.searchParams.delete("trails");
-  else url.searchParams.set("trails", "0");
-  if (state.tapeOn) url.searchParams.delete("tape");
-  else url.searchParams.set("tape", "0");
-  if (state.overlaysOn) url.searchParams.delete("ovl");
-  else url.searchParams.set("ovl", "0");
-  if (state.gridTick === undefined) url.searchParams.delete("g");
-  else url.searchParams.set("g", String(state.gridTick));
-  if (state.view === "ladder") url.searchParams.delete("view");
-  else url.searchParams.set("view", state.view);
-  history.replaceState(null, "", url);
+  history.replaceState(null, "", writeUrlState(location.href, state));
 }
 
 function onCommit(): void {
@@ -34,11 +21,17 @@ function onCommit(): void {
   }
 }
 
+/**
+ * Demo composition root. `?fixture=<name>` swaps the live socket for a
+ * recording under `/fixtures/`; `?speed=` sets the replay multiplier.
+ */
 async function main(): Promise<void> {
   const root = document.getElementById("root");
   if (root === null) throw new Error("index.html must contain #root");
   const params = new URLSearchParams(location.search);
-  const coin = params.get("coin") ?? "BTC";
+  const urlState = readUrlState(location.search);
+  const coin = urlState.coin;
+  const prefs = createPrefsStore(globalThis.localStorage);
   const fixtureName = params.get("fixture");
   let feed: FeedSource | undefined;
   let feedCoin = coin;
@@ -60,12 +53,13 @@ async function main(): Promise<void> {
       <Profiler id="orderbook" onRender={onCommit}>
         <OrderBook
           coin={feedCoin}
-          trails={params.get("trails") !== "0"}
-          tape={params.get("tape") !== "0"}
-          overlays={params.get("ovl") !== "0"}
-          {...(params.get("g") === null ? {} : { gridTick: Number(params.get("g")) })}
-          view={params.get("view") === "spine" ? "spine" : "ladder"}
+          trails={urlState.trailsOn}
+          tape={urlState.tapeOn}
+          overlays={urlState.overlaysOn}
+          view={urlState.view}
+          prefs={prefs}
           onStateChange={syncUrl}
+          {...(urlState.gridTick === undefined ? {} : { gridTick: urlState.gridTick })}
           {...(feed === undefined ? {} : { feed })}
         />
       </Profiler>
