@@ -34,6 +34,8 @@ export type TrailSample = {
   readonly rel: number;
   /** The level's persistence when sampled; scales alpha. */
   readonly sat: number;
+  /** Which side the level was on when sampled; fixes the tile's hue. */
+  readonly side: "bid" | "ask";
 };
 
 /** One sample of the touch: best bid/ask ticks and bid share at frame time `t`. */

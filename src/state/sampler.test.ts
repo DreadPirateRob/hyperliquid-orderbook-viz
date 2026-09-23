@@ -219,7 +219,7 @@ describe("trails and last trade", () => {
       0,
       0.016,
     );
-    expect(f?.rows.find((r) => r.px === 1000)?.trail).toEqual([{ t: 0, sz: 4, rel: 1, sat: SAT_FLOOR }]);
+    expect(f?.rows.find((r) => r.px === 1000)?.trail).toEqual([{ t: 0, sz: 4, rel: 1, sat: SAT_FLOOR, side: "bid" }]);
     expect(f?.midTrail).toEqual([{ t: 0, b: 1000, a: 1010, share: 0.4 }]);
     f = sample(s, input(snap), geometry, 200, 0.016);
     expect(f?.midTrail.length, "no new sample before 250 ms").toBe(1);
@@ -287,6 +287,63 @@ describe("trails and last trade", () => {
     expect(f?.lastTrade).toEqual({ px: 1010, dir: 1 });
     expect(f?.bestBidSz).toBe(4);
     expect(f?.bestAskSz).toBe(6);
+  });
+});
+
+/** Build `ms` of trail for an ask at 1010, with the touch resting at 1000/1010. */
+function withAskTrail(): { s: ReturnType<typeof sampler>; t: number } {
+  const s = sampler();
+  let t = 0;
+  for (; t <= 3000; t += 250) {
+    s.ingest(
+      {
+        snapshot: book([lvl(1000, 5)], [lvl(1010, 8)]),
+        events: t === 0 ? [{ ...ev("added", 1010, 0, 8), side: "ask" }] : [],
+        trades: [],
+        settle: false,
+      },
+      t,
+    );
+    s.project(geometry, t, 0.016);
+  }
+  return { s, t };
+}
+
+describe("a price keeps its trail when the touch moves past it", () => {
+  it("survives a sweep that turns an ask into a bid", () => {
+    const { s, t: t0 } = withAskTrail();
+    const before = s.project(geometry, t0, 0.016)?.rows.find((r) => r.px === 1010);
+    expect(before?.side).toBe("ask");
+    expect(before?.trail.length ?? 0).toBeGreaterThan(8);
+
+    // The touch lifts three levels: 1010 is now a bid. The price is the same and
+    // its history is intact, so the column must keep showing it.
+    let t = t0;
+    for (let k = 0; k < 4; k++, t += 250) {
+      s.ingest(
+        { snapshot: book([lvl(1030, 6), lvl(1010, 4)], [lvl(1040, 7)]), events: [], trades: [], settle: false },
+        t,
+      );
+      s.project(geometry, t, 0.016);
+    }
+    const after = s.project(geometry, t, 0.016)?.rows.find((r) => r.px === 1010);
+    expect(after?.side).toBe("bid");
+    expect(after?.trail.length ?? 0, "a sweep must not blank the history at that price").toBeGreaterThan(8);
+    // What happened there stays what happened there: the old samples were taken
+    // on the ask and keep saying so.
+    expect(after?.trail.some((x) => x.side === "ask")).toBe(true);
+  });
+
+  it("survives a widening spread that swallows the level", () => {
+    const { s, t: t0 } = withAskTrail();
+    let t = t0;
+    for (let k = 0; k < 4; k++, t += 250) {
+      s.ingest({ snapshot: book([lvl(990, 4)], [lvl(1030, 7)]), events: [], trades: [], settle: false }, t);
+      s.project(geometry, t, 0.016);
+    }
+    const row = s.project(geometry, t, 0.016)?.rows.find((r) => r.px === 1010);
+    expect(row?.side, "1010 now sits inside the spread").toBe("spread");
+    expect(row?.trail.length ?? 0, "a spread row still has a past").toBeGreaterThan(8);
   });
 });
 

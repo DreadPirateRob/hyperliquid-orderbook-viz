@@ -36,7 +36,6 @@ export type LevelState = {
   /** Spring-eased size. */
   readonly shown: number;
   readonly pulses: ReadonlyArray<Pulse>;
-  readonly trail: ReadonlyArray<TrailSample>;
 };
 
 /** Options fixed at construction. */
@@ -63,6 +62,20 @@ export type LevelHistory = {
   readonly sampleTrails: (t: number, maxSz: number) => void;
   /** Look up one level's state. */
   readonly get: (side: Side, px: Tick) => LevelState | undefined;
+  /**
+   * Look up a price's trail.
+   *
+   * Trails are keyed by price alone, not by `(side, price)`. A sweep flips
+   * which side a price is on, and the row's side is recomputed from the live
+   * touch every frame: keying the history by side meant a swept price looked up
+   * a key nothing had ever written, and its painted history vanished although
+   * the samples were still held under the other side. A price inside the spread
+   * has no side at all and lost its history for the same reason.
+   *
+   * @param px - The price.
+   * @returns Its samples, oldest first; empty when nothing was ever recorded.
+   */
+  readonly trailAt: (px: Tick) => ReadonlyArray<TrailSample>;
   /** True while any spring or pulse is live. */
   readonly moving: () => boolean;
   /** Settle every spring and drop pulses (tab return, reduced motion). */
@@ -75,6 +88,15 @@ function key(side: Side, px: Tick): string {
   return `${side}:${px}`;
 }
 
+/** Shared empty result: a price with no history must not allocate one per frame. */
+const EMPTY_TRAIL: ReadonlyArray<TrailSample> = [];
+
+/** Which of two entries at one price speaks for it: the live one, else the more recently changed. */
+function better(a: Entry, b: Entry): boolean {
+  if (a.live > 0 !== b.live > 0) return a.live > 0;
+  return a.lastChanged > b.lastChanged;
+}
+
 type Entry = {
   readonly side: Side;
   readonly px: Tick;
@@ -84,7 +106,6 @@ type Entry = {
   prev: number;
   readonly spring: Spring;
   pulses: Pulse[];
-  trail: TrailSample[];
 };
 
 /**
@@ -95,6 +116,8 @@ type Entry = {
  */
 export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
   const entries = new Map<string, Entry>();
+  /** Trail samples per price, independent of which side that price is on now. */
+  const trails = new Map<number, TrailSample[]>();
   const rec = (side: Side, px: Tick, t: number): Entry => {
     const k = key(side, px);
     let e = entries.get(k);
@@ -108,7 +131,6 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
         prev: 0,
         spring: new Spring(0, SIZE_K, SIZE_C),
         pulses: [],
-        trail: [],
       };
       entries.set(k, e);
     }
@@ -134,7 +156,6 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
     prev: e.prev,
     shown: e.spring.x,
     pulses: e.pulses,
-    trail: e.trail,
   });
 
   return {
@@ -181,23 +202,36 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
       }
     },
     sampleTrails: (t, maxSz) => {
-      // Before the first projection there is no ruler and so no scale. Falling
-      // back to the largest live level keeps the first samples on the same 0..1
-      // footing as every later one, instead of shading them against 1.
+      // Shading is decided here, once, against the scale in force at this
+      // instant, and stays with the sample for the rest of its 12 s life.
       let scale = maxSz;
       if (scale <= 0) for (const e of entries.values()) if (e.live > scale) scale = e.live;
+      // One sample per price. A price has at most one live side; when both
+      // sides carry an entry (the level just flipped, and the old side is a
+      // zero awaiting its 60 s eviction) the live one is the truth, and the
+      // more recently changed one breaks the tie.
       for (const e of entries.values()) {
-        // Shading is decided here, once, against the scale in force at this
-        // instant, and stays with the sample for the rest of its 12 s life.
-        e.trail.push({
+        const other = entries.get(key(e.side === "bid" ? "ask" : "bid", e.px));
+        if (other !== undefined && better(other, e)) continue;
+        let trail = trails.get(e.px);
+        if (trail === undefined) {
+          trail = [];
+          trails.set(e.px, trail);
+        }
+        trail.push({
           t,
           sz: e.live,
           rel: scale > 0 ? e.live / scale : 0,
           sat: SAT_FLOOR + (1 - SAT_FLOOR) * Math.min(1, (t - e.first) / PERSISTENCE_MS),
+          side: e.side,
         });
-        pruneBefore(e.trail, t - TRAIL_MS);
+      }
+      for (const [px, trail] of trails) {
+        pruneBefore(trail, t - TRAIL_MS);
+        if (trail.length === 0) trails.delete(px);
       }
     },
+    trailAt: (px) => trails.get(px) ?? EMPTY_TRAIL,
     get: (side, px) => {
       const e = entries.get(key(side, px));
       return e === undefined ? undefined : view(e);
@@ -212,6 +246,9 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
         e.pulses = [];
       }
     },
-    clear: () => entries.clear(),
+    clear: () => {
+      entries.clear();
+      trails.clear();
+    },
   };
 }

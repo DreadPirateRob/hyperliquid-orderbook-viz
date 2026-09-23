@@ -176,6 +176,7 @@ Things that cost real time, written down so they cost nobody else any.
 - Spot markets are absent from `metaAndAssetCtxs` entirely; they need `spotMetaAndAssetCtxs`, whose contexts carry `midPx`/`prevDayPx`/`dayNtlVlm` but never funding. Pricing spot from `allMids` alone — as this did at first — yields a bare number with no 24 h change. `allMids` remains the fallback for pairs the venue publishes no context for, and spot rows whose token indexes are missing are skipped rather than half-built.
 - Those spot contexts are **not parallel to `spotMeta.universe`**, which is the trap: the venue returned 330 listed pairs and 869 contexts, including pairs that are not listed at all. A positional join therefore reads a different market's row and is wrong _silently_ — HYPE/USDC showed a 0.0819 mark against a 96.89 mid and "0.0M" of volume, which looks like a formatting bug rather than a mis-join. Every context names itself in `coin`; that is the only safe key. A regression feeds contexts that are longer than, and out of order with, the universe.
 - Trades and book pushes have **no guaranteed causal order**, so "consumed vs cancelled" can only ever be a temporal join with a 600 ms grace window — and it is labelled a heuristic everywhere it appears.
+- Trail history was keyed by `(side, price)` but looked up with the side the row has _this frame_. The two agree until the touch moves — so a sweep blanked the column for every price whose side flipped, and a widening spread blanked every price it swallowed, while the samples sat intact under the old key. Replaying one recording: 4,164 blanked row-frames out of 163,852, plus 1,644 inside the spread; both zero after the fix. Trails are now keyed by price, each sample remembering the side it was taken on, and live state stays per side (ADR 0009).
 - Trail tiles used to be shaded against the _current_ frame's largest level, so painted history changed colour whenever something bigger appeared or aged out — a level that was hot when it happened would turn side-coloured a second later and back again. With the mid frozen, the scale swung 16.4 → 10.2 → 17.1 in two seconds and re-shaded every tracked tile. Shading is now frozen into the sample when it is taken (ADR 0009). History is a record; only live cells normalise against the live frame.
 - The mid crossing a power of ten changes what a fixed `nSigFigs` means, so the grid is re-derived when the decade changes — in the subscription gate as well as the engine. Conformance is checked against the grid, not the precision, so a gate still holding the boot-time step rejects every price that is valid on the new one and the ladder simply stops. The adapter follows the decade from `bbo`, which is not gated, so the new grid is in force before the first book push that uses it.
 - Desired precision is not transport state. A grouping chosen while the socket is down has to survive the reconnect; mutating the doomed subscription loses it silently, and the user gets their old grouping back with no error to explain it.
@@ -217,10 +218,10 @@ Measured on AMD Ryzen 7 4700U with Radeon Graphics (8 cores), Node v26.8.1, 2026
 
 | Synthetic rate | Sustained | apply p50 | apply p99 | Heap delta |
 | --- | --- | --- | --- | --- |
-| 1,000/s (33x live) | 77,115/s | 5.24 us | 82.62 us | -10.9 MB |
-| 10,000/s (333x live) | 91,630/s | 3.77 us | 69.21 us | 15.1 MB |
-| 50,000/s (1667x live) | 46,946/s | 3.77 us | 176.7 us | 24.4 MB |
-| 100,000/s (3333x live) | 31,251/s | 3.77 us | 305.07 us | 137 MB |
+| 1,000/s (33x live) | 81,540/s | 4.4 us | 77.8 us | -11.1 MB |
+| 10,000/s (333x live) | 94,325/s | 3.42 us | 65.79 us | 15.9 MB |
+| 50,000/s (1667x live) | 50,464/s | 3.35 us | 163.92 us | 15.8 MB |
+| 100,000/s (3333x live) | 30,445/s | 3.77 us | 320.09 us | 135.3 MB |
 
 **Render — emulated.** The widget replaying `btc-perp-active.jsonl.gz` at speed 1 in headless Chromium, telemetry read from its own HUD.
 
@@ -228,6 +229,6 @@ Scope: two viewports at the 60 fps cadence, sampled for 15 s after a 5 s warm-up
 
 | Viewport | fps | frame p50 | frame p95 |
 | --- | --- | --- | --- |
-| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 2.6 ms | 3.5 ms |
-| phone 390x844 DPR 3, 60 fps cap | 60 fps | 1.1 ms | 1.4 ms |
+| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 2.8 ms | 3.7 ms |
+| phone 390x844 DPR 3, 60 fps cap | 60 fps | 1.1 ms | 1.5 ms |
 <!-- bench:end -->

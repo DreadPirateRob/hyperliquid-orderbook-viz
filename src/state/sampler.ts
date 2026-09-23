@@ -263,7 +263,9 @@ function layRows(
       watch: side === "spread" || engine === undefined ? undefined : engine.watch(side, px),
       pulses: h?.pulses ?? EMPTY,
       first: h?.first ?? t,
-      trail: h?.trail ?? EMPTY,
+      // By price, not by side: a swept price or one inside the spread still has
+      // a past, and the row is the only place it can be shown.
+      trail: history.trailAt(px),
     });
   }
   return out;

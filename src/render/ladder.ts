@@ -296,7 +296,8 @@ function trailStrip(
   y: number,
   S: FrameSample,
 ): void {
-  if (row.side === "spread") return;
+  // No early return for a spread row: a price swallowed by a widening spread
+  // still has a past, and blanking it loses the very moment worth seeing.
   const cw = (w * TRAIL_DT) / TRAIL_MS;
   const x1 = x0 + w;
   for (const s of row.trail) {
@@ -311,7 +312,10 @@ function trailStrip(
     const cx1 = Math.min(x1, x + Math.max(2, cw));
     if (cx1 <= cx0) continue;
     // dimmed so the bid/ask paths keep ≥ 3:1 contrast over tiles
-    ctx.fillStyle = rgba(rel > 0.85 ? PALETTE.hot : sideColour(row.side), (0.06 + 0.42 * rel ** 0.7) * sat);
+    // Hue comes from the sample's own side, not the row's: after a sweep the
+    // row is on the other side, but what happened there happened on the side it
+    // was on at the time.
+    ctx.fillStyle = rgba(rel > 0.85 ? PALETTE.hot : sideColour(s.side), (0.06 + 0.42 * rel ** 0.7) * sat);
     ctx.fillRect(cx0, y + 3, cx1 - cx0, ROW - 6);
   }
   for (const p of row.pulses) {

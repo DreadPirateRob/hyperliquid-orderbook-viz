@@ -44,3 +44,13 @@ The trail column is a record of what happened. `rel` and `sat` are therefore com
 The cost is accepted and real: tiles from different moments no longer share one denominator, so comparing two columns of the strip compares sizes normalised at their own instants rather than on a single scale. Stability of history was judged worth more than a common scale across a 12 s window.
 
 The sampling denominator is the last projected frame's `maxSz` (at most one sample stale, since trails are sampled on the ingest timer rather than at paint). Before the first projection there is no ruler, so the largest live level stands in.
+
+## Amendment (Trails are keyed by price, not by side)
+
+v4 keys level history by `(side, price)` and looks a row up with the side the row has _this frame_ — `hist.get(key(side, px))`, with spread rows short-circuited to `null`. The row's side is recomputed from the live touch every frame, while history is written under the side the level had when the event arrived. The two disagree exactly when the touch moves.
+
+So a sweep blanked the column. A price that was an ask and is now a bid looked up a key nothing had ever written; the samples were still held, intact, under the old side. A price swallowed by a widening spread lost its history for the same reason, having no side to look up at all. Replaying `btc-perp-active` through the sampler: of 163,852 row-frames, **4,164** rendered blank while that price had trail samples under the other side, and **1,644** blanked inside the spread. Both counts are zero after the change.
+
+A trail is the record of what happened at a **price**, so it is stored per price. Live state — size, spring, pulses, ghost width — stays per side, because it describes a resting order on one side of the book and nothing about it survives the flip. Where both sides hold an entry for one price (the level just flipped and the old side is a zero awaiting its 60 s eviction) the live entry speaks for the price, and the more recently changed one breaks the tie.
+
+Each sample records the side it was taken on, and the renderer colours the tile from that rather than from the row. A sweep therefore leaves a legible seam — ask-coloured history above bid-coloured history at the same price — instead of repainting the past in the new side's colour, which would undo the freeze decision recorded above. Spread rows draw their trail for the same reason: the moment a level is swallowed is the moment most worth seeing.
