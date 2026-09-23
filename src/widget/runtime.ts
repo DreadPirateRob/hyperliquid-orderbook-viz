@@ -12,7 +12,11 @@ import { PALETTE } from "../render/palette";
 import { createLevelHistory } from "../state/level-history";
 import { createTape } from "../state/tape";
 import { TRAIL_DT } from "../state/trail";
-import { hudText } from "./hud";
+import type { HudRow } from "./hud";
+import { hudRows } from "./hud";
+
+/** Shared empty row list: the HUD being off must not allocate one per status. */
+const EMPTY_HUD: ReadonlyArray<HudRow> = [];
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
 import type { FrameSample } from "../state/frame-sample.types";
@@ -52,7 +56,8 @@ export type RuntimeStatus = {
   readonly coin: string;
   readonly groupLabel: string;
   /** Metrics HUD text; empty when metrics are off. */
-  readonly hud: string;
+  /** One row per metric group while the HUD is on; empty when it is off. */
+  readonly hud: ReadonlyArray<HudRow>;
   /** Grouping options for the current market, coarse to fine. */
   readonly groupOptions: ReadonlyArray<GroupOption>;
   /** Row step in raw ticks currently in use. */
@@ -190,7 +195,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       groupOptions,
       gridTick,
       hud: state.metricsOn
-        ? hudText({
+        ? hudRows({
             coin: market?.coin ?? "–",
             groupLabel,
             snapshot,
@@ -199,7 +204,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
             frameP50: at(0.5),
             frameP95: at(0.95),
           })
-        : "",
+        : EMPTY_HUD,
     });
   };
 

@@ -9,6 +9,9 @@ import { createInfoFetch } from "../data/info-cache";
 import type { Prefs, PrefsStore } from "../state/prefs";
 import { DEFAULT_PREFS } from "../state/prefs";
 import { PairPicker } from "./pair-picker";
+import type { HudRow } from "./hud";
+import { HUD_TIPS } from "./hud";
+import type { ReplayControls } from "./replay.types";
 import { Settings } from "./settings";
 import { createHyperliquidFeed } from "../data/hyperliquid-feed";
 import type { Runtime, RuntimeState, RuntimeStatus, View } from "./runtime";
@@ -30,6 +33,8 @@ export type OrderBookProps = {
   readonly overlays?: boolean;
   /** Grouping step in raw ticks at mount; omitted follows the market's default. */
   readonly gridTick?: number;
+  /** Host-provided recordings; when present the settings panel offers them and their playback speed. */
+  readonly replay?: ReplayControls | undefined;
   /** View at mount; default `"ladder"`. */
   readonly view?: View;
   /** Reports every user-driven state change so an embedder can mirror it (URL, storage). */
@@ -71,6 +76,34 @@ const BASE_STATE: RuntimeState = {
 };
 
 /**
+ * Write the HUD's rows into the DOM at 2 Hz, outside React (ADR 0008).
+ *
+ * Rows exist so each metric group can carry its own explanation; the row set is
+ * fixed, so steady state only rewrites the text that changed.
+ *
+ * @param container - The HUD element.
+ * @param rows - The rows to show, in display order.
+ */
+function paintHud(container: HTMLElement, rows: ReadonlyArray<HudRow>): void {
+  if (container.childElementCount !== rows.length) {
+    container.replaceChildren(
+      ...rows.map((row) => {
+        const el = document.createElement("pre");
+        el.className = "orderbook-hud-row";
+        el.dataset["tip"] = HUD_TIPS[row.key] ?? "";
+        el.textContent = row.text;
+        return el;
+      }),
+    );
+    return;
+  }
+  for (const [i, row] of rows.entries()) {
+    const el = container.children[i];
+    if (el !== undefined && el.textContent !== row.text) el.textContent = row.text;
+  }
+}
+
+/**
  * The widget root. Owns the canvas surfaces and the chrome; data, state and
  * rendering live in plain TypeScript modules behind it (ADR 0003). Only
  * toggles go through React state; everything that changes per frame is
@@ -84,8 +117,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null);
   const midRef = useRef<HTMLSpanElement>(null);
   const connRef = useRef<HTMLSpanElement>(null);
-  const groupRef = useRef<HTMLSpanElement>(null);
-  const hudRef = useRef<HTMLPreElement>(null);
+  const hudRef = useRef<HTMLDivElement>(null);
   const runtimeRef = useRef<Runtime | null>(null);
   const [trailsOn, setTrailsOn] = useState(props.trails ?? true);
   const [tapeOn, setTapeOn] = useState(props.tape ?? true);
@@ -157,10 +189,14 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
   }, [prefs, metricsOn]);
   const togglePause = useCallback(() => setPaused((p) => !p), []);
   const toggleGear = useCallback(() => setGearOpen((open) => !open), []);
+  // Closing something that is already closed must not move focus: `Escape` asks
+  // both popovers to close, and a blind refocus would drag the keyboard to the
+  // other popover's trigger.
   const closeGear = useCallback(() => {
+    if (!gearOpen) return;
     setGearOpen(false);
     gearButtonRef.current?.focus();
-  }, []);
+  }, [gearOpen]);
   const changeSettings = useCallback(
     (patch: Partial<Prefs>): void => {
       prefs?.set(patch);
@@ -168,11 +204,16 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     },
     [prefs, settings],
   );
+  // Pointer dismissal does not pull focus back to the trigger; the press that
+  // closed the popover has already put focus where the user aimed it.
+  const dismissGear = useCallback(() => setGearOpen(false), []);
+  const dismissPicker = useCallback(() => setPickerOpen(false), []);
   const openPicker = useCallback(() => setPickerOpen(true), []);
   const closePicker = useCallback(() => {
+    if (!pickerOpen) return;
     setPickerOpen(false);
     pairButtonRef.current?.focus();
-  }, []);
+  }, [pickerOpen]);
   const selectCoin = useCallback(
     (next: string): void => {
       setPickerOpen(false);
@@ -270,13 +311,12 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       createHyperliquidFeed({ coin, precision: undefined, fetch: fetchFn, WebSocket: globalThis.WebSocket });
     const onStatus = (s: RuntimeStatus): void => {
       if (midRef.current !== null) midRef.current.textContent = s.mid;
-      if (groupRef.current !== null) groupRef.current.textContent = s.groupLabel;
       if (connRef.current !== null) {
         connRef.current.textContent = s.connection;
         connRef.current.dataset["state"] = s.connection;
       }
       if (rootRef.current !== null) rootRef.current.dataset["connection"] = s.connection;
-      if (hudRef.current !== null && s.hud !== "") hudRef.current.textContent = s.hud;
+      if (hudRef.current !== null && s.hud.length > 0) paintHud(hudRef.current, s.hud);
       // Text alternative for the canvas, plus a polite announcement at no more
       // than 1 Hz: the mid moves several times a second and a screen reader
       // reading every change is unusable (spec, story 42).
@@ -381,10 +421,15 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             ref={pairButtonRef}
             onClick={openPicker}
             aria-haspopup="dialog"
+            data-tip="The market being watched. Opens the picker, which is also on the / key; choosing a market resets the engine and resubscribes."
           >
             {markets.find((m) => m.coin === coin)?.display ?? coin}
           </button>
-          <Stat label="mid" size="lead">
+          <Stat
+            label="mid"
+            size="lead"
+            tip="Midpoint of the widget's own book: the average of best bid and best ask at the current grouping. It moves with every push, so it leads the venue's mark."
+          >
             <span className="orderbook-mid" ref={midRef}>
               –
             </span>
@@ -392,10 +437,13 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
           <MarketStatsBar stats={stats[coin]} />
         </div>
         <div className="orderbook-barcontrols">
-          <span className="orderbook-group" ref={groupRef}>
-            –
-          </span>
-          <span className="orderbook-groupseg" role="group" aria-label="grouping">
+          <span
+            className="orderbook-groupseg"
+            role="group"
+            aria-label="grouping"
+            data-tip="Price grouping: how many ticks each ladder row spans. Coarser grouping asks the venue for a coarser book, so rows aggregate rather than merely display differently. [ and ] step it."
+            data-tip-align="right"
+          >
             {groups.options.map((o) => (
               <GroupButton
                 key={o.gridTick}
@@ -411,6 +459,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             aria-pressed={viewShown === "spine"}
             disabled={affordances.forcedView !== undefined}
             onClick={toggleView}
+            data-tip="Ladder shows price rows with depth; spine collapses both sides onto one axis for shape at a glance. Narrow viewports force spine. Key: v."
+            data-tip-align="right"
           >
             {viewShown}
           </button>
@@ -420,6 +470,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             aria-pressed={trailsShown}
             disabled={!affordances.trails}
             onClick={toggleTrails}
+            data-tip="The trail column: a short history of each row's size, newest at the right. Bright streaks are size that persisted; gaps are levels that came and went. Key: t."
+            data-tip-align="right"
           >
             trails
           </button>
@@ -429,6 +481,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             aria-pressed={tapeShown}
             disabled={!affordances.tape}
             onClick={toggleTape}
+            data-tip="The trade tape: prints newest first, sized by notional, tinted by aggressor side. Outsized prints are marked against the last five minutes. Key: p."
+            data-tip-align="right"
           >
             tape
           </button>
@@ -438,10 +492,19 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             aria-pressed={overlaysShown}
             disabled={!affordances.overlays}
             onClick={toggleOverlays}
+            data-tip="Per-row metric overlays: cancel share, refill and churn drawn on the ladder itself rather than as numbers. Key: o."
+            data-tip-align="right"
           >
             overlays
           </button>
-          <button type="button" className="orderbook-toggle" aria-pressed={metricsOn} onClick={toggleMetrics}>
+          <button
+            type="button"
+            className="orderbook-toggle"
+            aria-pressed={metricsOn}
+            onClick={toggleMetrics}
+            data-tip="The metrics HUD: book state, flow pressure, cancel and refill behaviour, and render cost. Each line explains itself on hover. Key: m."
+            data-tip-align="right"
+          >
             metrics
           </button>
           <button
@@ -450,10 +513,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             aria-pressed={paused}
             aria-label={paused ? "Resume" : "Pause"}
             onClick={togglePause}
+            data-tip="Freezes the picture, not the feed: events keep being applied underneath, so resuming shows the current book rather than replaying a backlog. Key: space."
+            data-tip-align="right"
           >
             {paused ? <Play size={12} aria-hidden /> : <Pause size={12} aria-hidden />}
           </button>
-          <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
+          <span
+            className="orderbook-conn"
+            ref={connRef}
+            data-state="CONNECTING"
+            data-tip="Socket state. LIVE is a current book; RESYNCING means a grouping or precision change is in flight and the ladder is frozen; STALE means no push has arrived recently."
+            data-tip-align="right"
+          >
             CONNECTING
           </span>
           <button
@@ -464,6 +535,8 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
             aria-label="Settings"
             aria-haspopup="dialog"
             onClick={toggleGear}
+            data-tip="Render cadence, depth ruler, and the demo's recordings."
+            data-tip-align="right"
           >
             <SettingsIcon size={12} aria-hidden />
           </button>
@@ -478,9 +551,20 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
           onSelect={selectCoin}
           onToggleFavourite={toggleFavourite}
           onClose={closePicker}
+          onDismiss={dismissPicker}
+          trigger={pairButtonRef}
         />
       ) : null}
-      {gearOpen ? <Settings prefs={settings} onChange={changeSettings} onClose={closeGear} /> : null}
+      {gearOpen ? (
+        <Settings
+          prefs={settings}
+          onChange={changeSettings}
+          onClose={closeGear}
+          onDismiss={dismissGear}
+          trigger={gearButtonRef}
+          replay={props.replay}
+        />
+      ) : null}
       <canvas
         className="orderbook-canvas"
         ref={canvasRef}
@@ -493,11 +577,7 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         onPointerLeave={onPointerLeave}
       />
       <p className="orderbook-live" ref={liveRef} role="status" aria-live="polite" />
-      {metricsOn ? (
-        <div className="orderbook-hud">
-          <pre ref={hudRef} />
-        </div>
-      ) : null}
+      {metricsOn ? <div className="orderbook-hud" ref={hudRef} /> : null}
     </div>
   );
 }
@@ -526,10 +606,17 @@ function Stat(props: {
   readonly label: string;
   readonly size?: "lead";
   readonly tone?: "up" | "dn";
+  /** What the figure is and how to read it. */
+  readonly tip: string;
   readonly children: React.ReactNode;
 }): JSX.Element {
   return (
-    <span className="orderbook-stat" data-size={props.size ?? "normal"} data-tone={props.tone ?? "flat"}>
+    <span
+      className="orderbook-stat"
+      data-size={props.size ?? "normal"}
+      data-tone={props.tone ?? "flat"}
+      data-tip={props.tip}
+    >
       <span className="orderbook-stat-value">{props.children}</span>
       <span className="orderbook-stat-label">{props.label}</span>
     </span>
@@ -542,20 +629,45 @@ function MarketStatsBar(props: { readonly stats: MarketStats | undefined }): JSX
   if (s === undefined) return <span className="orderbook-stats" />;
   return (
     <span className="orderbook-stats">
-      <Stat label="mark">
+      <Stat
+        label="mark"
+        tip="The venue's mark price, polled from REST every 10 s. It is the price used for funding and liquidation, and it lags the mid between polls."
+      >
         {s.mark >= 1000 ? s.mark.toLocaleString("en-US", { maximumFractionDigits: 0 }) : s.mark.toFixed(4)}
       </Stat>
       {s.changePct === undefined ? null : (
-        <Stat label="24h" tone={s.changePct >= 0 ? "up" : "dn"}>
+        <Stat
+          label="24h"
+          tone={s.changePct >= 0 ? "up" : "dn"}
+          tip="Change against the venue's previous-day price. Green is up, red is down; it is a daily figure and will not move with the ladder."
+        >
           {`${s.changePct >= 0 ? "+" : ""}${s.changePct.toFixed(2)}%`}
         </Stat>
       )}
-      {s.dayVolume === undefined ? null : <Stat label="24h vol">{formatVolume(s.dayVolume)}</Stat>}
-      {s.funding === undefined ? null : <Stat label="funding">{`${(s.funding * 100).toFixed(4)}%`}</Stat>}
+      {s.dayVolume === undefined ? null : (
+        <Stat
+          label="24h vol"
+          tip="Notional traded in the last 24 h, in quote currency. It is the liquidity proxy the pair picker ranks by; M is millions, B is billions."
+        >
+          {formatVolume(s.dayVolume)}
+        </Stat>
+      )}
+      {s.funding === undefined ? null : (
+        <Stat
+          label="funding"
+          tip="Current hourly funding rate for this perp. Positive means longs pay shorts, negative the reverse; spot markets have none, so the figure is absent there."
+        >
+          {`${(s.funding * 100).toFixed(4)}%`}
+        </Stat>
+      )}
     </span>
   );
 }
 
+/** Notional in quote currency. Thin spot pairs trade thousands a day, and "0.0M" reads as broken. */
 function formatVolume(volume: number): string {
-  return volume >= 1e9 ? `${(volume / 1e9).toFixed(2)}B` : `${(volume / 1e6).toFixed(1)}M`;
+  if (volume >= 1e9) return `${(volume / 1e9).toFixed(2)}B`;
+  if (volume >= 1e6) return `${(volume / 1e6).toFixed(1)}M`;
+  if (volume >= 1e3) return `${(volume / 1e3).toFixed(1)}K`;
+  return volume.toFixed(0);
 }

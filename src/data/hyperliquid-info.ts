@@ -28,14 +28,21 @@ const AssetCtx = z.object({
   funding: z.string().nullish(),
 });
 const MetaAndAssetCtxs = z.tuple([Meta, z.array(AssetCtx)]);
-/** Spot contexts carry a mark and a previous day, but never funding. */
+/**
+ * Spot contexts carry a mark and a previous day, but never funding. Each one
+ * names its own pair: the array is *not* parallel to `spotMeta.universe` (the
+ * venue publishes contexts for delisted and unlisted pairs too), so `coin` is
+ * the only safe key.
+ */
 const SpotAssetCtx = z.object({
+  coin: z.string().nullish(),
   markPx: z.string().nullish(),
   midPx: z.string().nullish(),
   prevDayPx: z.string().nullish(),
   dayNtlVlm: z.string().nullish(),
 });
 const SpotMetaAndAssetCtxs = z.tuple([SpotMeta, z.array(SpotAssetCtx)]);
+type SpotContext = z.infer<typeof SpotAssetCtx>;
 
 /** The venue answered, but not with the expected shape. */
 export class InfoMalformed extends Error {
@@ -225,11 +232,15 @@ export async function fetchStats(fetchFn: Fetch): Promise<Result<Record<string, 
   // which is why spot rows used to show a bare mark with no 24 h change.
   if (spotCtxs._tag === "ok") {
     const [spotMeta, spotContexts] = spotCtxs.value;
-    spotMeta.universe.forEach((pair, i) => {
-      const c = spotContexts[i];
-      if (c === undefined) return;
+    // Join on the context's own `coin`, never on position: the venue returns
+    // far more contexts than listed pairs, so index `i` is a different market.
+    const byCoin = new Map<string, SpotContext>();
+    for (const c of spotContexts) if (c.coin != null) byCoin.set(c.coin, c);
+    for (const pair of spotMeta.universe) {
+      const c = byCoin.get(pair.name);
+      if (c === undefined) continue;
       const mark = Number(c.midPx ?? c.markPx ?? Number.NaN);
-      if (!Number.isFinite(mark)) return;
+      if (!Number.isFinite(mark)) continue;
       const prev = c.prevDayPx == null ? Number.NaN : Number(c.prevDayPx);
       out[pair.name] = {
         mark,
@@ -237,7 +248,7 @@ export async function fetchStats(fetchFn: Fetch): Promise<Result<Record<string, 
         dayVolume: c.dayNtlVlm == null ? undefined : Number(c.dayNtlVlm),
         funding: undefined,
       };
-    });
+    }
   }
   // Anything the spot contexts did not cover still gets a price from the mids.
   for (const [coin, px] of Object.entries(mids.value)) {

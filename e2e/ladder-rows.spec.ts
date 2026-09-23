@@ -12,7 +12,7 @@ test("BTC recording reaches LIVE and paints ladder rows", async ({ page }) => {
   await expect(root).toHaveAttribute("data-feed", "injected");
   await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
   await expect(page.locator(".orderbook-mid")).toHaveText(/^8\d{4}(\.\d)?$/);
-  await expect(page.locator(".orderbook-group")).toHaveText("$1");
+  await expect(page.locator('.orderbook-group-option[aria-pressed="true"]')).toHaveText("$1");
 
   const layout = ladderLayout(1500, true, true);
   const painted = await page.locator("canvas.orderbook-canvas").evaluate((el, X) => {
@@ -55,7 +55,7 @@ test("the HUD updates by ref: no React commits at steady state", async ({ page }
   await expect(page.locator(".orderbook")).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
   await page.keyboard.press("m");
   await expect(page.locator(".orderbook")).toHaveAttribute("data-metrics", "1");
-  await expect(page.locator(".orderbook-hud pre")).toContainText("PRESSURE", { timeout: 5000 });
+  await expect(page.locator(".orderbook-hud")).toContainText("PRESSURE", { timeout: 5000 });
 
   // Let the mount settle. The market list and the stats poll are REST-bound and
   // may land inside the window below; the assertion tolerates them by counting
@@ -67,7 +67,7 @@ test("the HUD updates by ref: no React commits at steady state", async ({ page }
     const count = Reflect.get(commits, "count");
     return typeof count === "number" ? count : -1;
   });
-  const hudBefore = await page.locator(".orderbook-hud pre").textContent();
+  const hudBefore = await page.locator(".orderbook-hud").textContent();
   // Three seconds is ~180 frames at 60 fps. Chrome state that is not a frame —
   // the market list and the 10 s stats refresh — may land inside the window, so
   // the claim is about the order of magnitude: frames never re-render React.
@@ -78,7 +78,7 @@ test("the HUD updates by ref: no React commits at steady state", async ({ page }
     const count = Reflect.get(commits, "count");
     return typeof count === "number" ? count : -1;
   });
-  const hudAfter = await page.locator(".orderbook-hud pre").textContent();
+  const hudAfter = await page.locator(".orderbook-hud").textContent();
 
   expect(after - before, "frames do not re-render React").toBeLessThanOrEqual(3);
   expect(hudAfter, "the HUD keeps updating while React is idle").not.toBe(hudBefore);
@@ -112,7 +112,6 @@ test("grouping steps with the keyboard, resubscribes, and survives in the URL", 
   await page.goto("/?fixture=btc-perp-active&speed=4");
   const root = page.locator(".orderbook");
   await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
-  await expect(page.locator(".orderbook-group")).toHaveText("$1");
   const options = page.locator(".orderbook-group-option");
   await expect(options).toHaveText(["$1", "$2", "$5", "$10", "$100"]);
   await expect(options.nth(0)).toHaveAttribute("aria-pressed", "true");
@@ -169,9 +168,12 @@ test("escape closes the picker and returns focus to its trigger", async ({ page 
 test("a shared link's grouping survives the load", async ({ page }) => {
   await page.goto("/?coin=BTC&g=50");
   const root = page.locator(".orderbook");
-  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 25_000 });
+  // This is one of the few tests on the real venue, and it boots while the rest
+  // of the suite is also hitting `/info`, which rate-limits. The budget covers
+  // a backoff and a retry: it is a replay test, not a latency test.
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 40_000 });
   // The request is made before the option list exists, so the runtime must replay it.
-  await expect(page.locator(".orderbook-group")).toHaveText("$5", { timeout: 20_000 });
+  await expect(page.locator('.orderbook-group-option[aria-pressed="true"]')).toHaveText("$5", { timeout: 30_000 });
   await expect(page).toHaveURL(/g=50/);
 });
 
@@ -188,7 +190,7 @@ test("settings persist across a reload and drive the render cadence", async ({ p
   await expect(gear).toHaveCount(0);
 
   await page.keyboard.press("m");
-  await expect(page.locator(".orderbook-hud pre")).toContainText(/RENDER\s+3\d\.\d fps/, { timeout: 5000 });
+  await expect(page.locator(".orderbook-hud")).toContainText(/RENDER\s+3\d\.\d fps/, { timeout: 5000 });
 
   await page.reload();
   await page.getByLabel("Settings").click();
@@ -200,7 +202,7 @@ test("pause freezes the picture while the feed keeps flowing", async ({ page }) 
   const root = page.locator(".orderbook");
   await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
   await page.keyboard.press("m");
-  await expect(page.locator(".orderbook-hud pre")).toContainText("PRESSURE", { timeout: 5000 });
+  await expect(page.locator(".orderbook-hud")).toContainText("PRESSURE", { timeout: 5000 });
 
   const pixels = (): Promise<string> =>
     page.locator("canvas.orderbook-canvas").evaluate((el) => {
@@ -216,14 +218,14 @@ test("pause freezes the picture while the feed keeps flowing", async ({ page }) 
   await page.keyboard.press("Space");
   await expect(root).toHaveAttribute("data-paused", "1");
   const frozen = await pixels();
-  const bookBefore = await page.locator(".orderbook-hud pre").textContent();
+  const bookBefore = await page.locator(".orderbook-hud").textContent();
   await page.waitForTimeout(2500);
 
   // The canvas holds the frame it had when paused...
   expect(await pixels()).toBe(frozen);
   // ...while the engine keeps folding pushes: the HUD reads the live snapshot.
   await expect
-    .poll(async () => (await page.locator(".orderbook-hud pre").textContent()) !== bookBefore, { timeout: 5000 })
+    .poll(async () => (await page.locator(".orderbook-hud").textContent()) !== bookBefore, { timeout: 5000 })
     .toBe(true);
 
   // Resuming shows the book as it is now, without replaying the paused interval.
@@ -237,7 +239,7 @@ test("the metrics HUD keeps its numbers when overlays are off", async ({ page })
   const root = page.locator(".orderbook");
   await expect(root).toHaveAttribute("data-connection", /LIVE|SUBSCRIBING|CONNECTING/, { timeout: 20_000 });
   await page.keyboard.press("m");
-  const hud = page.locator(".orderbook-hud pre");
+  const hud = page.locator(".orderbook-hud");
   await expect(hud).toContainText(/PRESSURE\s+-?\d/, { timeout: 10_000 });
 
   // Overlays and metrics are independent controls; turning the per-row
@@ -308,4 +310,89 @@ test("one toggle writes the URL once, even under StrictMode", async ({ page }) =
     return typeof n === "number" ? n : -1;
   });
   expect(writes, "one interaction, one outward notification").toBe(1);
+});
+
+test("a press outside dismisses a popover, one inside does not", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+
+  const picker = page.locator(".orderbook-pairpop");
+  await page.locator(".orderbook-pair").click();
+  await expect(picker).toBeVisible();
+  // A press on the picker's own chrome is an interaction, not a dismissal.
+  await page.locator(".orderbook-pairsearch").click();
+  await expect(picker).toBeVisible();
+  // The ladder behind it is the "I am done here" target. The panel is anchored
+  // top-left and 340 px wide, so the far right is clear of it whatever the
+  // market list does — this test must not depend on that list loading.
+  await page.locator("canvas.orderbook-canvas").click({ position: { x: 1300, y: 700 } });
+  await expect(picker).toHaveCount(0);
+
+  const gear = page.getByRole("dialog", { name: "Settings" });
+  const gearButton = page.getByRole("button", { name: "Settings" });
+  await gearButton.click();
+  await expect(gear).toBeVisible();
+  await page.locator("canvas.orderbook-canvas").click({ position: { x: 300, y: 700 } });
+  await expect(gear).toHaveCount(0);
+
+  // The trigger is excluded from outside-dismissal, so its own toggle decides:
+  // press once to open, press again to close, never dismiss-then-reopen.
+  await gearButton.click();
+  await expect(gear).toBeVisible();
+  await gearButton.click();
+  await expect(gear).toHaveCount(0);
+});
+
+test("the settings panel switches recordings and retimes playback", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+  await expect(root).toHaveAttribute("data-coin", "BTC");
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  const replay = page.getByRole("group", { name: "Replay" });
+  await expect(replay.locator('.orderbook-replay-option[aria-pressed="true"]')).toContainText("btc-perp-active");
+
+  // Speed applies to the recording in flight, so the feed must not reconnect.
+  const speed = replay.getByRole("combobox");
+  await expect(speed).toHaveValue("1");
+  await speed.selectOption("4");
+  await expect(page).toHaveURL(/speed=4/);
+  await expect(root).toHaveAttribute("data-connection", "LIVE");
+
+  // A quick link loads a different recording, and the coin follows it.
+  await replay.getByRole("button", { name: /eth-perp/ }).click();
+  await expect(page).toHaveURL(/fixture=eth-perp/);
+  await expect(root).toHaveAttribute("data-coin", "ETH", { timeout: 20_000 });
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+});
+
+test("every metric and control explains itself on hover", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+  if ((await root.getAttribute("data-metrics")) !== "1") await page.keyboard.press("m");
+  await expect(page.locator(".orderbook-hud")).toBeVisible();
+
+  // A metric line nobody can interpret is not a measurement: every row carries
+  // what it is and how to read it.
+  const rows = page.locator(".orderbook-hud-row");
+  await expect(rows).not.toHaveCount(0);
+  for (const tip of await rows.evaluateAll((els) => els.map((el) => el.getAttribute("data-tip") ?? ""))) {
+    expect(tip.length, tip).toBeGreaterThan(40);
+  }
+
+  // The tip is drawn by the anchor's ::after, so a real hover must produce
+  // content: an attribute with no rule behind it would be invisible.
+  await rows.first().hover();
+  const shown = await rows.first().evaluate((el) => getComputedStyle(el, "::after").content);
+  expect(shown, "hovering a metric row renders its explanation").toContain("Coin, grouping step");
+
+  // The bar's controls and figures are explained too.
+  const tipped = await page
+    .locator(".orderbook-bar [data-tip]")
+    .evaluateAll((els) => els.map((el) => el.getAttribute("data-tip") ?? ""));
+  expect(tipped.length).toBeGreaterThan(8);
+  for (const tip of tipped) expect(tip.length, tip).toBeGreaterThan(40);
 });

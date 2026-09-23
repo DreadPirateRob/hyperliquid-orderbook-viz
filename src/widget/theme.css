@@ -93,7 +93,6 @@ body,
   font-size: 10px;
 }
 
-.orderbook-group,
 .orderbook-conn {
   color: var(--dim);
 }
@@ -166,10 +165,22 @@ body,
   background: #0f1319f2;
   border: 1px solid #ffffff1a;
   border-radius: 6px;
+  /* The block itself is inert over the ladder; only the rows take the pointer,
+     so a metric can explain itself without swallowing a ruler drag. */
   pointer-events: none;
 }
 
-.orderbook-hud pre {
+.orderbook-hud-row {
+  pointer-events: auto;
+}
+
+/* A blank line between metric groups, without an empty row to hover. */
+.orderbook-hud-row[data-tip^="Exponentially"],
+.orderbook-hud-row[data-tip^="Frame rate"] {
+  margin-top: 11px;
+}
+
+.orderbook-hud-row {
   margin: 0;
   font:
     11px/1.45 ui-monospace,
@@ -390,4 +401,103 @@ body,
 .orderbook[data-compact="1"] .orderbook-bar {
   gap: 8px;
   padding: 0 8px;
+}
+
+/* Replay quick links: a host-provided section, absent on a live-only embed. */
+.orderbook-replay {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid #ffffff14;
+  padding-top: 10px;
+}
+
+.orderbook-replay-title {
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.orderbook-replay-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.orderbook-replay-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.orderbook-replay-option:hover {
+  background: #ffffff10;
+}
+
+.orderbook-replay-option[aria-pressed="true"] {
+  border-color: #ffffff30;
+  background: #ffffff10;
+}
+
+.orderbook-replay-note {
+  color: var(--dim);
+  font-size: 10px;
+}
+
+/*
+ * Tooltips. `data-tip` carries the text; the tip is drawn by the anchor rather
+ * than by a floating layer, because every tipped element here is inside the
+ * widget's own stacking context and a portal would buy nothing.
+ */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]:hover::after,
+[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: 320px;
+  white-space: normal;
+  padding: 7px 9px;
+  border: 1px solid #ffffff24;
+  border-radius: 4px;
+  background: #11161df7;
+  color: var(--text);
+  font:
+    10.5px/1.5 ui-monospace,
+    Menlo,
+    monospace;
+  text-align: left;
+  pointer-events: none;
+}
+
+/* Anchors near the right edge would push their tip off-canvas. */
+[data-tip][data-tip-align="right"]:hover::after,
+[data-tip][data-tip-align="right"]:focus-visible::after {
+  left: auto;
+  right: 0;
+}
+
+/* The HUD sits centred and low-contrast; its tips read better above the row. */
+.orderbook-hud-row:hover::after {
+  top: auto;
+  bottom: calc(100% + 6px);
 }

@@ -66,13 +66,13 @@ describe("tape", () => {
   });
 });
 
-describe("outlier threshold caching", () => {
-  /** 20 prints of size 1 plus one whale: enough to pass the minimum sample count. */
-  function fill(tape: ReturnType<typeof createTape>, t: number): void {
-    const prints = Array.from({ length: 20 }, (_, i) => trade(1000 + i, 1, "B", i));
-    tape.apply([...prints, trade(1100, 500, "B", 21)], t);
-  }
+/** 20 prints of size 1 plus one whale: enough to pass the minimum sample count. */
+function fill(tape: ReturnType<typeof createTape>, t: number): void {
+  const prints = Array.from({ length: 20 }, (_, i) => trade(1000 + i, 1, "B", i));
+  tape.apply([...prints, trade(1100, 500, "B", 21)], t);
+}
 
+describe("outlier threshold caching", () => {
   it("returns the same threshold between prints and updates when one arrives", () => {
     const tape = createTape();
     fill(tape, 1000);

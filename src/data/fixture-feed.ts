@@ -18,18 +18,37 @@ export type FixtureFeedOptions = {
   readonly speed: number;
 };
 
+/** A replaying feed whose speed can be changed while it runs. */
+export type FixtureFeed = FeedSource & {
+  /** Change the multiplier without restarting playback or jumping the timeline. */
+  readonly setSpeed: (speed: number) => void;
+};
+
 /**
  * Build a replaying feed.
  *
  * @param fixture - The parsed recording.
- * @param options - Playback speed.
+ * @param options - Initial playback speed.
  * @returns A feed source; `select` is a no-op because the recording fixes the precision.
  */
-export function createFixtureFeed(fixture: Fixture, options: FixtureFeedOptions): FeedSource {
+export function createFixtureFeed(fixture: Fixture, options: FixtureFeedOptions): FixtureFeed {
+  let speed = options.speed;
+  let rebase: ((next: number) => void) | undefined;
   return {
+    setSpeed: (next) => {
+      if (next <= 0 || Number.isNaN(next) || next === speed) return;
+      // While playing, the running schedule owns the change: it must re-anchor
+      // against the outgoing speed before adopting the new one.
+      if (rebase === undefined) speed = next;
+      else rebase(next);
+    },
     start: (listener) => {
-      const t0 = Date.now();
-      const rx0 = fixture.lines[0]?.rx ?? fixture.meta.startedAt;
+      // The schedule is anchored rather than absolute: a speed change moves the
+      // anchor to where playback has actually reached, so the new multiplier
+      // applies from here instead of retiming the whole recording and jumping.
+      let anchorWall = Date.now();
+      let anchorRx = fixture.lines[0]?.rx ?? fixture.meta.startedAt;
+      const t0 = anchorWall;
       const mark = firstMid(fixture);
       const emit = (e: FeedEvent): void => listener(e);
       emit({
@@ -48,7 +67,7 @@ export function createFixtureFeed(fixture: Fixture, options: FixtureFeedOptions)
         while (index < fixture.lines.length) {
           const line = fixture.lines[index];
           if (line === undefined) break;
-          const at = t0 + (line.rx - rx0) / options.speed;
+          const at = anchorWall + (line.rx - anchorRx) / speed;
           if (at > now) {
             timer = setTimeout(deliver, at - now);
             return;
@@ -101,8 +120,19 @@ export function createFixtureFeed(fixture: Fixture, options: FixtureFeedOptions)
         }
         emit({ _tag: "connection", event: { _tag: "closed", reason: "end of recording" }, rx: now });
       };
+      rebase = (next): void => {
+        const now = Date.now();
+        anchorRx += (now - anchorWall) * speed;
+        anchorWall = now;
+        speed = next;
+        if (timer === undefined) return;
+        clearTimeout(timer);
+        timer = undefined;
+        deliver();
+      };
       deliver();
       return () => {
+        rebase = undefined;
         clearTimeout(timer);
         index = fixture.lines.length;
       };

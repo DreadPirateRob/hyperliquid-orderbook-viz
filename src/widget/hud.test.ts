@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { BookSnapshot, Metrics } from "../data/engine-api.types";
-import { hudText } from "./hud";
+import { HUD_TIPS, hudRows } from "./hud";
+
+/** The rows joined, which is how a reader sees the block. */
+function hudText(input: Parameters<typeof hudRows>[0]): string {
+  return hudRows(input)
+    .map((r) => r.text)
+    .join("\n");
+}
 
 const snapshot = {
   version: 1,
@@ -48,7 +55,7 @@ const input = {
   frameP95: 5.9,
 };
 
-describe("hudText", () => {
+describe("hudRows", () => {
   it("reports every metric group with its units", () => {
     const text = hudText(input);
     expect(text).toContain("MARKET   BTC   group $1   state LIVE");
@@ -69,5 +76,14 @@ describe("hudText", () => {
     const text = hudText({ ...input, metrics: undefined });
     expect(text).toContain("PRESSURE –");
     expect(text).toContain("share –");
+  });
+
+  it("explains every row it emits", () => {
+    // A row with no explanation is a number nobody can read; the widget hangs
+    // these on the rows as tooltips, so a missing one is a silent gap.
+    for (const row of hudRows(input)) {
+      expect(HUD_TIPS[row.key], row.key).toBeTypeOf("string");
+      expect(HUD_TIPS[row.key]?.length ?? 0, row.key).toBeGreaterThan(40);
+    }
   });
 });

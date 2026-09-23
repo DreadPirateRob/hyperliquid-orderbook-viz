@@ -76,6 +76,21 @@ Prints, newest first, aligned with the row they hit: age, direction mark, price,
 
 `m` opens the HUD: pressure, cancel ratios by count and by volume, churn, median refill and refill-at-5 s, convexity, and render telemetry. It is written straight to the DOM by ref at 2 Hz — React does not re-render for it, and an end-to-end test asserts exactly that.
 
+Every row explains itself on hover, and every control in the bar and the settings panel carries the same kind of tooltip. The text lives beside the formatting in `src/widget/hud.ts`, so a metric cannot ship without one — a unit test and an end-to-end test both fail if a row has no explanation.
+
+#### How to read each row
+
+| Row        | What it is                                                                                                | How to read it                                                                                                                                                             |
+| ---------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MARKET`   | Coin, grouping step, socket state.                                                                        | `LIVE` is a current book. `RESYNCING` means a grouping or precision change is in flight and the ladder is deliberately frozen rather than mixing two grids.                |
+| `BOOK`     | Levels held per side, share of resting size inside the visible window, 5-level imbalance.                 | `imb5` runs −1 (all size on the ask) to +1 (all on the bid); near 0 is balanced. A low `share` means most depth is outside the window you are looking at.                  |
+| `PRESSURE` | Exponentially weighted size-delta field, 3 s half-life: size joining adds, size leaving subtracts.        | Positive means size is arriving faster on the bid, negative on the ask. It is in grouped size units — read it against this market's typical row size, not as a percentage. |
+| `CANCEL%`  | Of the size that left each side, how much was cancelled rather than traded, by event count and by volume. | High by count but low by volume is many small pulls; the reverse is a few large ones. A dash means too few decreases in the window to say.                                 |
+| `CHURN/s`  | Level changes per second and size churned per second, counting every change rather than only decreases.   | High churn with low cancel% is genuine turnover; high churn with high cancel% is quoting noise.                                                                            |
+| `REFILL`   | Median time for a consumed level to come back, and the share refilled within 5 s.                         | A quick median with a high `@5s` share is a resilient book. `>30s` means most levels never came back inside the window.                                                    |
+| `CONVEX`   | Share of each side's visible depth sitting nearest the touch.                                             | Above 0.5 the book is front-loaded and thin behind it; below 0.5 depth is spread out and the touch is cheaper to move.                                                     |
+| `RENDER`   | Frame rate and per-frame cost over the last 120 frames.                                                   | A p95 well under 16.7 ms leaves headroom at 60 fps; a p95 near it means frames are at risk of being dropped.                                                               |
+
 ### Pair picker
 
 ![Pair picker](docs/images/pair-picker.png)
@@ -89,6 +104,10 @@ Rows are ranked, not left in venue order: an exact ticker match first, then pref
 ![Settings](docs/images/settings.png)
 
 Render cadence (60 fps, 30 fps, or draw only on update) and how far the depth ruler reaches. These are preferences: they persist in `localStorage` and stay out of the URL, while everything shareable (coin, grouping, columns, view) lives in the URL (ADR 0008).
+
+Below them, the demo hands the widget its recordings: one click swaps the live socket for any fixture, and while a recording is playing a speed control retimes it. Speed applies to the playback in flight — the recording does not restart, and the schedule re-anchors where it has actually reached rather than retiming from the beginning and jumping. Recordings and speed are shareable state, so they land in the URL as `?fixture=` and `?speed=`.
+
+The recordings are the host's, not the widget's: `OrderBook` takes an optional `replay` prop, and an embedder that passes nothing gets no replay section. The library knows about a `FeedSource`, never about a fixture directory.
 
 ### Grouping
 
@@ -154,7 +173,8 @@ Things that cost real time, written down so they cost nobody else any.
 - `levels[0]` is bids descending and `levels[1]` asks ascending — **observed, never documented**. The wire layer asserts it instead of trusting it.
 - The socket drops at 60 s of silence; a ping every ~50 s keeps it. `{nSigFigs: 5, mantissa: 1}` returns HTTP 500 with a null body, so the base grid omits the mantissa.
 - `/info` **rate-limits hard**. Naively, mounting the widget fired four `/info` calls plus a 10 s stats poll and earned a 429 storm. One shared fetch now dedupes in-flight bodies, caches per payload type, and serves the last good body during a 30 s backoff.
-- Spot markets are absent from `metaAndAssetCtxs` entirely; they need `spotMetaAndAssetCtxs`, whose contexts are positional against `spotMeta.universe` and carry `midPx`/`prevDayPx`/`dayNtlVlm` but never funding. Pricing spot from `allMids` alone — as this did at first — yields a bare number with no 24 h change. `allMids` remains the fallback for the ~24 of 305 pairs the venue publishes no context for. Spot rows whose token indexes are missing are skipped rather than half-built.
+- Spot markets are absent from `metaAndAssetCtxs` entirely; they need `spotMetaAndAssetCtxs`, whose contexts carry `midPx`/`prevDayPx`/`dayNtlVlm` but never funding. Pricing spot from `allMids` alone — as this did at first — yields a bare number with no 24 h change. `allMids` remains the fallback for pairs the venue publishes no context for, and spot rows whose token indexes are missing are skipped rather than half-built.
+- Those spot contexts are **not parallel to `spotMeta.universe`**, which is the trap: the venue returned 330 listed pairs and 869 contexts, including pairs that are not listed at all. A positional join therefore reads a different market's row and is wrong _silently_ — HYPE/USDC showed a 0.0819 mark against a 96.89 mid and "0.0M" of volume, which looks like a formatting bug rather than a mis-join. Every context names itself in `coin`; that is the only safe key. A regression feeds contexts that are longer than, and out of order with, the universe.
 - Trades and book pushes have **no guaranteed causal order**, so "consumed vs cancelled" can only ever be a temporal join with a 600 ms grace window — and it is labelled a heuristic everywhere it appears.
 - The mid crossing a power of ten changes what a fixed `nSigFigs` means, so the grid is re-derived when the decade changes — in the subscription gate as well as the engine. Conformance is checked against the grid, not the precision, so a gate still holding the boot-time step rejects every price that is valid on the new one and the ladder simply stops. The adapter follows the decade from `bbo`, which is not gated, so the new grid is in force before the first book push that uses it.
 - Desired precision is not transport state. A grouping chosen while the socket is down has to survive the reconnect; mutating the doomed subscription loses it silently, and the user gets their old grouping back with no error to explain it.

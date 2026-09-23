@@ -1,7 +1,9 @@
 import type { JSX } from "react";
+import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Star } from "lucide-react";
 import type { MarketStats, MarketSummary } from "../data/hyperliquid-info";
+import { useDismissOnOutside } from "./dismiss";
 import { useFocusTrap } from "./focus-trap";
 
 /**
@@ -22,6 +24,10 @@ export type PairPickerProps = {
   readonly onSelect: (coin: string) => void;
   readonly onToggleFavourite: (coin: string) => void;
   readonly onClose: () => void;
+  /** Dismiss without returning focus to the trigger: a pointer press outside already moved it. */
+  readonly onDismiss: () => void;
+  /** The trigger, excluded from outside-dismissal so its own handler decides. */
+  readonly trigger: RefObject<HTMLElement | null>;
 };
 
 const TABS: ReadonlyArray<{ readonly id: Tab; readonly label: string }> = [
@@ -37,7 +43,7 @@ const TABS: ReadonlyArray<{ readonly id: Tab; readonly label: string }> = [
  * @returns The popover element.
  */
 export function PairPicker(props: PairPickerProps): JSX.Element {
-  const { markets, stats, favourites, current, onSelect, onToggleFavourite, onClose } = props;
+  const { markets, stats, favourites, current, onSelect, onToggleFavourite, onClose, onDismiss, trigger } = props;
   const [tab, setTabState] = useState<Tab>(current.startsWith("@") ? "spot" : "perp");
   const [query, setQueryState] = useState("");
   const [cursor, setCursor] = useState(0);
@@ -45,6 +51,7 @@ export function PairPicker(props: PairPickerProps): JSX.Element {
   const listRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   useFocusTrap(rootRef);
+  useDismissOnOutside(rootRef, onDismiss, trigger);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();

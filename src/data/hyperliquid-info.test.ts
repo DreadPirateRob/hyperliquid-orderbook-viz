@@ -44,7 +44,19 @@ const ctxs = [
 
 const allMids = { BTC: "86000.5", ETH: "3000.5", "@107": "41.23", "@999": "7.5" };
 
-const spotCtxs = [spotMeta, [{ midPx: "41.5", prevDayPx: "40.0", dayNtlVlm: "250000" }]];
+/**
+ * The venue publishes contexts for pairs that are not in `universe`, in a
+ * different order and in greater number, so this list is deliberately not
+ * parallel to it: `@107` sits at position 1 here and position 0 there.
+ */
+const spotCtxs = [
+  spotMeta,
+  [
+    { coin: "@105", midPx: "0.0819", prevDayPx: "0.0835", dayNtlVlm: "0.0" },
+    { coin: "@107", midPx: "41.5", prevDayPx: "40.0", dayNtlVlm: "250000" },
+    { coin: "@404", midPx: "1.0", prevDayPx: "1.0", dayNtlVlm: "7" },
+  ],
+];
 
 describe("fetchUniverse", () => {
   it("lists tradeable perps and spot pairs with display names and size decimals", async () => {
@@ -89,10 +101,20 @@ describe("fetchStats", () => {
     const r = await fetchStats(fakeFetch({ metaAndAssetCtxs: ctxs, spotMetaAndAssetCtxs: spotCtxs, allMids }));
     if (r._tag === "err") throw r.error;
     const hype = r.value["@107"];
+    // Joined on the context's own coin: position 0 is a different market whose
+    // mark is off by three orders of magnitude, which is what a positional
+    // join used to show in the bar.
     expect(hype?.mark).toBeCloseTo(41.5, 6);
     expect(hype?.changePct).toBeCloseTo(3.75, 6);
     expect(hype?.dayVolume).toBeCloseTo(250_000, 0);
     expect(hype?.funding).toBeUndefined();
+  });
+
+  it("ignores contexts for pairs the universe does not list", async () => {
+    const r = await fetchStats(fakeFetch({ metaAndAssetCtxs: ctxs, spotMetaAndAssetCtxs: spotCtxs, allMids }));
+    if (r._tag === "err") throw r.error;
+    expect(r.value["@105"]).toBeUndefined();
+    expect(r.value["@404"]).toBeUndefined();
   });
 
   it("falls back to the mids for a spot pair the venue publishes no context for", async () => {
