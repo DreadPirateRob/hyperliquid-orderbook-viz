@@ -55,6 +55,13 @@ export function createTape(): Tape {
   let sizes: Array<{ readonly t: number; readonly sz: number }> = [];
   let lastPx: number | undefined;
   let lastDir: -1 | 0 | 1 = 0;
+  /**
+   * The outlier threshold is read every painted frame but only changes when a
+   * print arrives or the oldest one ages out of the window — and the second is
+   * a time we can compute. Sorting a five-minute window at 60 fps is work ADR
+   * 0004 explicitly rules out.
+   */
+  let cached: { readonly value: number; readonly validUntil: number } | undefined;
   return {
     apply: (trades, t) => {
       for (const tr of trades) {
@@ -70,20 +77,33 @@ export function createTape(): Tape {
           if (rows.length > CAP) rows.pop();
         }
         sizes.push({ t, sz: tr.sz });
+        cached = undefined;
       }
     },
     rows: () => rows,
     outlierSize: (t) => {
+      const current = cached;
+      if (current !== undefined && t < current.validUntil) return current.value;
       pruneBefore(sizes, t - P95_WINDOW_MS);
-      if (sizes.length < P95_MIN_PRINTS) return Number.POSITIVE_INFINITY;
+      // Valid until the oldest retained print leaves the window; after that the
+      // set has genuinely changed and the threshold must be recomputed.
+      const oldest = sizes[0];
+      const validUntil = oldest === undefined ? t : oldest.t + P95_WINDOW_MS;
+      if (sizes.length < P95_MIN_PRINTS) {
+        cached = { value: Number.POSITIVE_INFINITY, validUntil };
+        return Number.POSITIVE_INFINITY;
+      }
       const sorted = sizes.map((s) => s.sz).toSorted((a, b) => a - b);
-      return sorted[Math.floor(0.95 * (sorted.length - 1))] ?? Number.POSITIVE_INFINITY;
+      const value = sorted[Math.floor(0.95 * (sorted.length - 1))] ?? Number.POSITIVE_INFINITY;
+      cached = { value, validUntil };
+      return value;
     },
     clear: () => {
       rows = [];
       sizes = [];
       lastPx = undefined;
       lastDir = 0;
+      cached = undefined;
     },
   };
 }

@@ -65,3 +65,38 @@ describe("tape", () => {
     expect(tape.outlierSize(1)).toBe(Number.POSITIVE_INFINITY);
   });
 });
+
+describe("outlier threshold caching", () => {
+  /** 20 prints of size 1 plus one whale: enough to pass the minimum sample count. */
+  function fill(tape: ReturnType<typeof createTape>, t: number): void {
+    const prints = Array.from({ length: 20 }, (_, i) => trade(1000 + i, 1, "B", i));
+    tape.apply([...prints, trade(1100, 500, "B", 21)], t);
+  }
+
+  it("returns the same threshold between prints and updates when one arrives", () => {
+    const tape = createTape();
+    fill(tape, 1000);
+    const first = tape.outlierSize(1000);
+    expect(first).toBeLessThan(500);
+    // No new prints: the answer cannot change, whatever the frame clock says.
+    expect(tape.outlierSize(1016)).toBe(first);
+    expect(tape.outlierSize(2000)).toBe(first);
+
+    // A burst of large prints moves the distribution, so the cache must drop.
+    tape.apply(
+      Array.from({ length: 30 }, (_, i) => trade(1200, 900, "B", 100 + i)),
+      2100,
+    );
+    expect(tape.outlierSize(2100)).toBeGreaterThan(first);
+  });
+
+  it("recomputes once the oldest print ages out of the five-minute window", () => {
+    const tape = createTape();
+    fill(tape, 1000);
+    const whaleIncluded = tape.outlierSize(1000);
+
+    // Five minutes later every print above has expired: too few samples remain.
+    expect(tape.outlierSize(1000 + 300_001)).toBe(Number.POSITIVE_INFINITY);
+    expect(whaleIncluded).toBeLessThan(Number.POSITIVE_INFINITY);
+  });
+});
