@@ -91,6 +91,8 @@ export function createAttribution(): Attribution {
   // prints: at 100k events/s the 15 s window is six figures deep.
   let byPrice = new Map<Tick, PriceBucket>();
   let pending: PendingDecrease[] = [];
+  /** Index of the oldest decrease still open; the queue in front of it is dead. */
+  let pendingFrom = 0;
   /**
    * Open decreases by price, so a print re-joins only its own price. Each
    * bucket is append-ordered in time and consumed from `from`, so expiry is a
@@ -167,22 +169,29 @@ export function createAttribution(): Attribution {
         }
       }
       dirty.clear();
-      let expired = 0;
-      while (expired < pending.length && t - (pending[expired]?.at ?? t) > GRACE_MS) {
-        const p = pending[expired];
+      // Expiry walks the queue front: decreases open in arrival order. The
+      // queue is consumed by cursor and compacted once it is mostly dead, so
+      // neither this walk nor a long-lived hot price copies the whole array.
+      while (pendingFrom < pending.length && t - (pending[pendingFrom]?.at ?? t) > GRACE_MS) {
+        const p = pending[pendingFrom];
         if (p !== undefined) {
           p.open = false;
-          // Per price, decreases expire in the order they opened: bump the
-          // cursor instead of rebuilding the bucket.
           const bucket = pendingByPrice.get(p.px);
           if (bucket !== undefined) {
             while (bucket.from < bucket.items.length && bucket.items[bucket.from]?.open === false) bucket.from++;
             if (bucket.from >= bucket.items.length) pendingByPrice.delete(p.px);
+            else if (bucket.from > bucket.items.length / 2) {
+              bucket.items.splice(0, bucket.from);
+              bucket.from = 0;
+            }
           }
         }
-        expired++;
+        pendingFrom++;
       }
-      if (expired > 0) pending.splice(0, expired);
+      if (pendingFrom > pending.length / 2) {
+        pending.splice(0, pendingFrom);
+        pendingFrom = 0;
+      }
       return moved;
     },
     prune: (t) => {
@@ -203,6 +212,7 @@ export function createAttribution(): Attribution {
     clear: () => {
       byPrice = new Map();
       pending = [];
+      pendingFrom = 0;
       pendingByPrice = new Map();
       dirty.clear();
     },
