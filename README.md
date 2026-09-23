@@ -46,15 +46,15 @@ Drawn over it are the bid and ask touch paths — where the best bid and best as
 
 ### Metric overlays
 
-![Hover highlight and overlays](docs/images/hover.png)
+![Metric overlays around the touch](docs/images/overlays.png)
 
-Toggled with `o`:
+Toggled with `o`. In the shot above, reading left to right on each row: the price label, the heat cell, then the narrow overlay strip before the size bar.
 
-- **Size-delta field** — a narrow strip per row whose colour and height encode the decayed sum of size changes at that price (τ = 3 s). Teal means net adds, rose means net pulls. It is deliberately _not_ called order-flow imbalance: the feed carries no order events (ADR 0005).
-- **Resiliency bars** — a thin bar under a level that lost at least half its size, filling as it refills.
+- **Size-delta field** — the narrow strip per row, whose colour and height encode the decayed sum of size changes at that price (τ = 3 s). Teal means net adds, rose means net pulls. It is deliberately _not_ called order-flow imbalance: the feed carries no order events (ADR 0005).
+- **Resiliency bars** — the thin light line under a size bar, on a level that lost at least half its size; it fills as the level refills.
 - **Migration connectors** — a dashed line with a dot when a level vanished at one price and an equal-sized one appeared within three ticks in the same push. That pairing is a heuristic, not a fact.
 
-Hovering paints the row highlight on the canvas itself (there are no DOM rows to style).
+The dimmed band (here on 86622) is the hover highlight, painted on the canvas itself because there are no DOM rows to style. The tagged row is the touch, and `Σ` marks a ruler stop's cumulative depth.
 
 ### The trades tape
 
