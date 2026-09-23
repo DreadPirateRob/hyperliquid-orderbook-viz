@@ -1,0 +1,83 @@
+{
+  "ranAt": "2026-09-23T00:24:57.304Z",
+  "machine": {
+    "cpu": "AMD Ryzen 7 4700U with Radeon Graphics",
+    "cores": 8,
+    "node": "v26.8.1"
+  },
+  "recording": "fixtures/btc-perp-active.jsonl.gz",
+  "mix": {
+    "ack": 4,
+    "l2Book:slow": 46,
+    "l2Book:fast": 444,
+    "trades": 660,
+    "bbo": 2409
+  },
+  "liveRate": 30,
+  "burst": [
+    {
+      "rate": 1000,
+      "seconds": 5,
+      "events": 5000,
+      "sustained": 69702,
+      "applyP50Us": 5.17,
+      "applyP99Us": 89.89,
+      "heapDeltaMb": -11.2,
+      "synthetic": true
+    },
+    {
+      "rate": 10000,
+      "seconds": 5,
+      "events": 50000,
+      "sustained": 57303,
+      "applyP50Us": 3.77,
+      "applyP99Us": 100.5,
+      "heapDeltaMb": 11.6,
+      "synthetic": true
+    },
+    {
+      "rate": 50000,
+      "seconds": 5,
+      "events": 250000,
+      "sustained": 23881,
+      "applyP50Us": 4.26,
+      "applyP99Us": 322.67,
+      "heapDeltaMb": 53.1,
+      "synthetic": true
+    },
+    {
+      "rate": 100000,
+      "seconds": 5,
+      "events": 500000,
+      "sustained": 15839,
+      "applyP50Us": 4.82,
+      "applyP99Us": 526.68,
+      "heapDeltaMb": 141.7,
+      "synthetic": true
+    }
+  ],
+  "render": [
+    {
+      "label": "desktop",
+      "width": 1500,
+      "height": 820,
+      "dpr": 1,
+      "cadence": "60",
+      "fps": 60,
+      "frameP50Ms": 2.4,
+      "frameP95Ms": 3.4,
+      "emulated": true
+    },
+    {
+      "label": "phone",
+      "width": 390,
+      "height": 844,
+      "dpr": 3,
+      "cadence": "60",
+      "fps": 60,
+      "frameP50Ms": 1.2,
+      "frameP95Ms": 1.5,
+      "emulated": true
+    }
+  ]
+}

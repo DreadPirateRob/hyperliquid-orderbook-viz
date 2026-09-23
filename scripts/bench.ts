@@ -14,7 +14,7 @@ import { runRenderBench } from "./render-bench";
  */
 
 const RATES = [1_000, 10_000, 50_000, 100_000] as const;
-const SECONDS = 10;
+const SECONDS = 5;
 const LIVE_RATE = 30;
 const PORT = 4183;
 const CASES: ReadonlyArray<RenderCase> = [
