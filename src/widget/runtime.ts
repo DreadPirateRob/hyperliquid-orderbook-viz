@@ -160,7 +160,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       applyWantedGrid();
       return;
     }
-    if (state.paused && event._tag !== "connection" && event._tag !== "tick") return;
+    // Pause freezes the picture, never the feed (spec, story 44): the book
+    // stays current so resuming shows the market as it is now, not as it was.
     engine.apply(event);
   });
   const hostTick = setInterval(() => engine.apply({ _tag: "tick", rx: Date.now() }), HOST_TICK_MS);
@@ -173,6 +174,31 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   };
   document.addEventListener("visibilitychange", onVisibility);
 
+  /** The 2 Hz status line; shared so a paused widget still reports connection. */
+  const emitStatus = (snapshot: BookSnapshot, S: FrameSample | undefined): void => {
+    const sorted = [...frames].toSorted((a, b) => a - b);
+    const at = (q: number): number => sorted[Math.floor(q * (sorted.length - 1))] ?? 0;
+    options.onStatus({
+      connection: snapshot.connection,
+      mid: S === undefined || scale === undefined ? "–" : Tick.formatMid(S.mid, scale),
+      coin: market?.coin ?? "–",
+      groupLabel,
+      groupOptions,
+      gridTick,
+      hud: state.metricsOn
+        ? hudText({
+            coin: market?.coin ?? "–",
+            groupLabel,
+            snapshot,
+            metrics: S?.metrics,
+            fps,
+            frameP50: at(0.5),
+            frameP95: at(0.95),
+          })
+        : "",
+    });
+  };
+
   /**
    * Ask the feed for the grouping the widget wants. A request made before the
    * market is known (a `g` URL param, say) is not lost: the option list only
@@ -184,6 +210,17 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     const t = performance.now();
     const snapshot = engine.snapshot();
     const cap = state.cadence === "30" ? FPS30_CAP_MS : 0;
+    if (state.paused) {
+      // Hold the last painted frame: skip sampling and drawing, keep the clock
+      // and the status line live so a disconnect is still visible while paused.
+      lastT = t;
+      snapPending = true;
+      if (t - lastStatus > STATUS_MS) {
+        lastStatus = t;
+        emitStatus(snapshot, lastFrame);
+      }
+      return;
+    }
     // Hover is not book state, so an `on update` cadence would otherwise hold the stale frame.
     if (state.cadence === "update" && snapshot.version === lastVersion && !sampler.moving() && !hoverDirty) return;
     hoverDirty = false;
@@ -257,32 +294,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     if (frames.length > 120) frames.shift();
     drawn++;
     if (t - lastStatus > STATUS_MS) {
-      const sorted = [...frames].toSorted((a, b) => a - b);
-      const at = (q: number): number => sorted[Math.floor(q * (sorted.length - 1))] ?? 0;
       fps = drawn / ((t - fpsSince) / 1000);
       drawn = 0;
       fpsSince = t;
       lastStatus = t;
-      const metrics = S?.metrics;
-      options.onStatus({
-        connection: snapshot.connection,
-        mid: S === undefined || scale === undefined ? "–" : Tick.formatMid(S.mid, scale),
-        coin: market?.coin ?? "–",
-        groupLabel,
-        groupOptions,
-        gridTick,
-        hud: state.metricsOn
-          ? hudText({
-              coin: market?.coin ?? "–",
-              groupLabel,
-              snapshot,
-              metrics,
-              fps,
-              frameP50: at(0.5),
-              frameP95: at(0.95),
-            })
-          : "",
-      });
+      emitStatus(snapshot, S);
     }
   };
   raf = requestAnimationFrame(frame);

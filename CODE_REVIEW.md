@@ -40,6 +40,8 @@ This changes the meaning of the observatory's core trade-versus-cancellation met
 
 **Recommendation:** retain the cumulative baseline alongside a logical start cursor, or rebase surviving sums when compacting. Keep a regression covering partial pruning followed by a query starting before the first retained print. Also cover adding more trades after compaction.
 
+**Resolution (fixed).** Reproduced first: a new test in `src/data/attribution.test.ts` failed with exactly the reported `consumed=101, cancelled=99`. `PriceBucket` now carries `base: { bid, ask }`, the cumulative totals already dropped; `prune()` records `cum[drop - 1]` before splicing and `volumeAt` starts from `base[side]` when the query's lower bound precedes the first surviving entry. Still O(log n). The regression covers a query starting before the first retained print and prints added after compaction.
+
 ## P2 — Behavior and reliability
 
 ### 2. Pause drops incoming data instead of freezing rendering
@@ -55,6 +57,8 @@ The probe started at mid 100, paused, and delivered a new book at mid 110. Paint
 **Contract:** spec story 44, `.scratch/orderbook-widget/spec.md:74`: “pause (space) rendering while the feed keeps flowing.”
 
 **Recommendation:** ingest regardless of pause; freeze the displayed sample/paint while paused, with an explicit bounded policy for presentation events. On resume, sample the current book and settle presentation rather than replaying the paused interval.
+
+**Resolution (fixed).** The feed listener no longer filters on `state.paused`: every event is folded. The frame loop returns before sampling and painting while paused, holding the last frame, and sets `snapPending` so resuming settles instead of replaying the gap. Status still emits at 2 Hz through a shared `emitStatus`, so the connection dot and the HUD's live-snapshot lines stay current while paused. Measured: paint calls during 1.5 s paused went from 22,848 to **0**. Covered end to end by `pause freezes the picture while the feed keeps flowing`, which asserts the canvas pixels are identical while the HUD keeps changing, and README now states the contract.
 
 ### 3. Disabling overlays also disables independent HUD metrics
 

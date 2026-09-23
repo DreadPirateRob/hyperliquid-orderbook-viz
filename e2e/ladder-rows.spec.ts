@@ -194,3 +194,40 @@ test("settings persist across a reload and drive the render cadence", async ({ p
   await page.getByLabel("Settings").click();
   await expect(page.getByRole("dialog", { name: "Settings" }).getByRole("slider")).toHaveValue("20");
 });
+
+test("pause freezes the picture while the feed keeps flowing", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", "LIVE", { timeout: 20_000 });
+  await page.keyboard.press("m");
+  await expect(page.locator(".orderbook-hud pre")).toContainText("PRESSURE", { timeout: 5000 });
+
+  const pixels = (): Promise<string> =>
+    page.locator("canvas.orderbook-canvas").evaluate((el) => {
+      if (!(el instanceof HTMLCanvasElement)) return "";
+      const ctx = el.getContext("2d");
+      if (ctx === null) return "";
+      const data = ctx.getImageData(0, 0, Math.min(el.width, 400), Math.min(el.height, 400)).data;
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 97) sum += data[i] ?? 0;
+      return String(sum);
+    });
+
+  await page.keyboard.press("Space");
+  await expect(root).toHaveAttribute("data-paused", "1");
+  const frozen = await pixels();
+  const bookBefore = await page.locator(".orderbook-hud pre").textContent();
+  await page.waitForTimeout(2500);
+
+  // The canvas holds the frame it had when paused...
+  expect(await pixels()).toBe(frozen);
+  // ...while the engine keeps folding pushes: the HUD reads the live snapshot.
+  await expect
+    .poll(async () => (await page.locator(".orderbook-hud pre").textContent()) !== bookBefore, { timeout: 5000 })
+    .toBe(true);
+
+  // Resuming shows the book as it is now, without replaying the paused interval.
+  await page.keyboard.press("Space");
+  await expect(root).toHaveAttribute("data-paused", "0");
+  await expect.poll(pixels, { timeout: 5000 }).not.toBe(frozen);
+});

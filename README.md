@@ -24,6 +24,8 @@ npm run e2e                                                # 17 Playwright tests
 
 Left to right: the pair button (`/`), the mid, the grouping the server confirmed, the grouping segment (`[` and `]`), the view and column toggles, 24 h stats, pause (space), the connection dot, and settings.
 
+**Pause freezes the picture, not the feed.** The engine keeps folding every push while paused — only sampling and painting stop, so the canvas holds the frame it had and the loop does no work at all. Resuming shows the book as it is _now_; the paused interval is never replayed as animation. The connection dot stays live while paused, so a drop is still visible.
+
 The connection dot is not decoration: `LIVE`, `STALE` (no push inside the stream's expected interval), `RESYNCING` (a grouping change is in flight) and `DISCONNECTED` are distinct states, and the ladder behaves differently in each.
 
 ### The ladder
@@ -159,6 +161,10 @@ Things that cost real time, written down so they cost nobody else any.
 - The burst benchmark, not a unit test, exposed the real scaling wall: the attribution join and the metric windows were **arrays that got scanned**. A 15 s print window at one price, a 60 s decrease window per side, and a grace list of open decreases are all trivial at the live 30 events/s and all quadratic when the rate climbs. Indexing them — prints by price with prefix sums and binary search, decreases by price with a cursor, the ratio window as fixed 250 ms buckets — took apply p50 from rate-dependent milliseconds to a flat ~4 µs, and sustained throughput at a synthetic 100k events/s from 1,388 to 28,653 events/s — a 20x improvement that no amount of profiling the render path would have found.
 - There is still a floor, and it is honest: a 15 s window at 100k events/s is inherently ~10⁶ retained prints, so above ~50k events/s the cost is allocation and GC, not lookup. That floor is visible in the table: apply p50 stays flat while sustained throughput falls as the heap fills. The table below shows it as heap delta, and the numbers are from a laptop 4700U, not a server.
 - A burst harness that omits the host `tick` measures an engine that never prunes. That is a bug in the harness, not headroom in the engine.
+
+**The widget**
+
+- Pause is an easy thing to get backwards. Dropping events at the feed listener looks like "pause" and is actually data loss: the book silently diverges from the venue, and resuming shows a stale market. The ingest path and the presentation path have to be paused separately, and only the presentation one should ever stop.
 
 **The browser**
 
