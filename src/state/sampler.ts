@@ -58,10 +58,21 @@ export type SamplerOptions = {
   readonly reducedMotion: () => boolean;
 };
 
-/** The state layer's sampler. */
+/**
+ * The state layer's sampler, split in two on purpose.
+ *
+ * `ingest` folds what the engine produced into presentation state — pulses,
+ * trails, tape. `project` turns that state into one frame for the canvas.
+ * They run at different rates: ingestion must keep up with the feed even when
+ * nothing is painted (a hidden tab, an idle book under the `on update`
+ * cadence), or the trail column grows holes for time that was never sampled
+ * and the engine's queues grow without a consumer.
+ */
 export type Sampler = {
-  /** Fold the frame's changes into the history and produce a frame, or nothing until both sides have a best. */
-  readonly sample: (input: FrameInput, geometry: SampleGeometry, t: number, dt: number) => FrameSample | undefined;
+  /** Fold the engine's output into presentation state. Safe to call without painting. */
+  readonly ingest: (input: FrameInput, t: number) => void;
+  /** Produce a frame from the state already ingested, or nothing until both sides have a best. */
+  readonly project: (geometry: SampleGeometry, t: number, dt: number) => FrameSample | undefined;
   /**
    * Forget the ladder. `"grid"` (grouping/precision change) keeps the tape and
    * touch trail, as v4's `resetLadder` does; `"coin"` forgets everything.
@@ -86,8 +97,13 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
   const live: Migration[] = [];
   const midTrail: MidSample[] = [];
   let lastTrade: FrameSample["lastTrade"];
+  /** The most recent ingested snapshot; projection reads it, never the feed. */
+  let latest: { snapshot: BookSnapshot; engine: MetricSource | undefined } | undefined;
+  let settlePending = false;
   return {
-    sample: ({ snapshot, events, trades, settle, migrations, engine }, geometry, t, dt) => {
+    ingest: ({ snapshot, events, trades, settle, migrations, engine }, t) => {
+      latest = { snapshot, engine };
+      if (settle) settlePending = true;
       if (migrations !== undefined && migrations.length > 0) live.push(...migrations);
       pruneMigrations(live, t);
       history.applyLevelEvents(events, t);
@@ -98,8 +114,29 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
           lastTrade === undefined || tr.px === lastTrade.px ? (lastTrade?.dir ?? 0) : tr.px > lastTrade.px ? 1 : -1;
         lastTrade = { px: tr.px, dir };
       }
+      const gb = snapshot.bids[0];
+      const ga = snapshot.asks[0];
+      if (gb === undefined || ga === undefined) return;
+      const bb = snapshot.bestBid ?? gb;
+      const aa = snapshot.bestAsk ?? ga;
+      // The trail is a time axis: it is sampled here, not at paint time, so a
+      // frame the widget chose not to draw does not punch a hole in it.
+      // `>=`, not `>`: the ingest timer fires at exactly TRAIL_DT, and a
+      // strict comparison drops every other sample, halving trail resolution.
+      if (t - lastTrail >= TRAIL_DT) {
+        lastTrail = t;
+        history.sampleTrails(t);
+        midTrail.push({ t, b: bb.px, a: aa.px, share: bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5 });
+        pruneBefore(midTrail, t - TRAIL_MS);
+      }
+    },
+    project: (geometry, t, dt) => {
+      const current = latest;
+      if (current === undefined) return undefined;
+      const { snapshot, engine } = current;
       history.step(t, dt);
-      if (settle) {
+      if (settlePending) {
+        settlePending = false;
         history.snap();
         anchor.snap(anchor.target);
       }
@@ -111,12 +148,6 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
       const b = bb.px;
       const a = aa.px;
       const mid = (b + a) / 2;
-      if (t - lastTrail > TRAIL_DT) {
-        lastTrail = t;
-        history.sampleTrails(t);
-        midTrail.push({ t, b, a, share: bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5 });
-        pruneBefore(midTrail, t - TRAIL_MS);
-      }
       if (!anchorSet) {
         anchor.snap(mid);
         anchorSet = true;
@@ -176,6 +207,8 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
       anchorSet = false;
       history.clear();
       lastTrail = -Infinity;
+      latest = undefined;
+      settlePending = false;
       if (scope === "coin") {
         tape.clear();
         midTrail.length = 0;

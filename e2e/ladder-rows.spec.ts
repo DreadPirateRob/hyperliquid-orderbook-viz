@@ -248,3 +248,37 @@ test("the metrics HUD keeps its numbers when overlays are off", async ({ page })
   await expect(hud).toContainText(/CHURN\/s\s+bid\s+\d/);
   await expect(hud).not.toContainText("share –");
 });
+
+test("a UI change repaints a settled book under the on-update cadence", async ({ page }) => {
+  // `on update` draws only when something changed; a view switch is a change.
+  await page.addInitScript(() => localStorage.setItem("ob.prefs", JSON.stringify({ cadence: "update" })));
+  await page.goto("/?fixture=btc-perp-quiet&speed=1");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", /LIVE|SUBSCRIBING|CONNECTING/, { timeout: 20_000 });
+  await page.waitForTimeout(1500);
+
+  const paints = async (): Promise<number> =>
+    page.evaluate(() => {
+      const counts = Reflect.get(globalThis, "__obPaints");
+      const n = counts === null || typeof counts !== "object" ? -1 : Reflect.get(counts, "fills");
+      return typeof n === "number" ? n : -1;
+    });
+  await page.evaluate(() => {
+    const cv = document.querySelector("canvas");
+    if (!(cv instanceof HTMLCanvasElement)) return;
+    const ctx = cv.getContext("2d");
+    if (ctx === null) return;
+    const counts = { fills: 0 };
+    Reflect.set(globalThis, "__obPaints", counts);
+    const original = ctx.fillRect.bind(ctx);
+    ctx.fillRect = (...args: Parameters<typeof original>) => {
+      counts.fills++;
+      original(...args);
+    };
+  });
+
+  const before = await paints();
+  await page.keyboard.press("v");
+  await expect(root).toHaveAttribute("data-view", "spine");
+  await expect.poll(paints, { timeout: 3000 }).toBeGreaterThan(before);
+});

@@ -55,6 +55,13 @@ class BookEngine implements Engine {
   private scratch: SideStore = makeSide(64);
   private events: LevelEvent[] = [];
   private trades: Trade[] = [];
+  /**
+   * Presentation queues are bounded. They are drained by the widget, and a
+   * suspended tab can stop draining for minutes while the socket keeps
+   * delivering; the book itself stays exact, but nobody needs a ten-minute
+   * backlog of pulses to animate on return, and memory is not free.
+   */
+  private static readonly QUEUE_CAP = 4096;
   private version = 0;
   private connection: ConnectionState = "CONNECTING";
   private bestBid: Level | undefined;
@@ -101,6 +108,7 @@ class BookEngine implements Engine {
         if (event.historical) return;
         for (const t of event.trades) {
           this.lastTrade = t;
+          if (this.trades.length >= BookEngine.QUEUE_CAP) this.trades.shift();
           this.trades.push(t);
           this.attribution.addTrade(t, event.rx);
         }
@@ -283,6 +291,7 @@ class BookEngine implements Engine {
       this.stats.change(side, px, from, to, rx, stream !== "bbo", split);
       if (decrease > 0) this.attribution.openPending(side, px, decrease, split, windowStart, rx);
     }
+    if (this.events.length >= BookEngine.QUEUE_CAP) this.events.shift();
     this.events.push({
       side,
       px,
@@ -373,6 +382,7 @@ class BookEngine implements Engine {
       for (const a of added) {
         if (Math.abs(a.to - v.from) > 0.1 * v.from) continue;
         if (Math.abs(a.px - v.px) > 3 * this.gridTick) continue;
+        if (this.migrations.length >= BookEngine.QUEUE_CAP) this.migrations.shift();
         this.migrations.push({ side: v.side, from: v.px, to: a.px, t: rx });
         break;
       }

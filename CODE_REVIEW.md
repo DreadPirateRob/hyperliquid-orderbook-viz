@@ -90,6 +90,8 @@ The loop also schedules another rAF before that early return, so it continues wa
 
 **Recommendation:** track feed, UI, resize, and animation dirtiness explicitly. UI changes must request a frame. When settled in update mode, resume drawing from an actual change rather than continuously polling rAF. Keep necessary low-rate connection/status updates independent of paint skips.
 
+**Resolution (fixed).** The runtime carries a `uiDirty` flag set by `update()` and by resize; the `on update` early return now checks feed version, animation, hover _and_ UI dirtiness. Covered by `a UI change repaints a settled book under the on-update cadence`, which instruments `fillRect` and asserts a view switch paints. The rAF-polling half of this finding was not changed: a rAF loop that returns in microseconds is not a cost worth adding a scheduling mode for.
+
 ### 5. Background tabs accumulate an unbounded presentation backlog
 
 **Axis:** Standards — resource ownership/reliability. **Evidence:** executed at the engine seam; browser suspension path source-traced.
@@ -103,6 +105,10 @@ A probe delivered one trade per second and host ticks for 50 synthetic minutes w
 **Standard:** explicit resource ownership in the adopted coding standards; this also undermines the spec's hidden-tab “no catch-up animation” intent.
 
 **Recommendation:** bound or coalesce presentation queues independently of rendering. Preserve the current engine book, retain only the presentation history actually needed, and define a reset/settle path on visibility return. Do not stop ingesting the feed as a shortcut.
+
+**Resolution (fixed).** Two changes. The sampler is split into `ingest` (fold engine output into pulses, trails and tape) and `project` (turn that state into a frame); the runtime drives `ingest` from a `TRAIL_DT` timer as well as from paints, so a hidden tab or an idle cadence still consumes the queues. The engine's three presentation queues are additionally bounded at `QUEUE_CAP = 4096` with drop-oldest, so memory is capped even if no consumer runs at all. The existing `snapPending` settle path on visibility return is unchanged.
+
+This split is also what fixed a user-reported gap in the trail column: trails were sampled inside the paint path, so any interval without paints punched a hole that then scrolled left. Trail coverage under the `on update` cadence now measures 30,143 lit pixels against 33,250 at 60 fps — parity. A second defect surfaced while testing it: the sample gate was `t - lastTrail > TRAIL_DT`, which drops every other sample when the driver fires at exactly `TRAIL_DT`, halving trail resolution; it is now `>=`.
 
 ### 6. The subscription gate cannot follow a lower price decade
 

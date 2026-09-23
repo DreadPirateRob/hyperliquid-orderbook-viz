@@ -166,6 +166,7 @@ Things that cost real time, written down so they cost nobody else any.
 
 **The widget**
 
+- Presentation ingestion must not be welded to painting. Folding engine output into pulses, trails and tape inside the paint path means every skipped frame — a hidden tab, a quiet book under the `on update` cadence — silently skips ingestion too: the trail column grows holes for time that was never sampled, and the engine's queues grow with no consumer. `ingest` runs on a timer, `project` runs on paints.
 - Pause is an easy thing to get backwards. Dropping events at the feed listener looks like "pause" and is actually data loss: the book silently diverges from the venue, and resuming shows a stale market. The ingest path and the presentation path have to be paused separately, and only the presentation one should ever stop.
 
 **The browser**

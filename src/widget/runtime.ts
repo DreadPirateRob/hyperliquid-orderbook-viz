@@ -11,6 +11,7 @@ import { drawTape } from "../render/tape";
 import { PALETTE } from "../render/palette";
 import { createLevelHistory } from "../state/level-history";
 import { createTape } from "../state/tape";
+import { TRAIL_DT } from "../state/trail";
 import { hudText } from "./hud";
 import type { Sampler } from "../state/sampler";
 import { createSampler } from "../state/sampler";
@@ -122,6 +123,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   let disposed = false;
   let hoverY: number | undefined;
   let hoverDirty = false;
+  /** A toggle, view, ruler or resize change: a settled book still has to repaint. */
+  let uiDirty = true;
 
   const resize = (): void => {
     const dpr = window.devicePixelRatio || 1;
@@ -132,6 +135,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     canvas.height = Math.round(height * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     lastVersion = -1;
+    uiDirty = true;
   };
   const observer = new ResizeObserver(resize);
   observer.observe(canvas);
@@ -204,6 +208,35 @@ export function createRuntime(options: RuntimeOptions): Runtime {
    * market is known (a `g` URL param, say) is not lost: the option list only
    * exists once the market arrives, so this runs again then.
    */
+  /**
+   * Drain the engine into presentation state. Driven by a timer as well as by
+   * paints: a hidden tab or an idle `on update` cadence still has to consume
+   * what the socket produced, or the queues grow and the trail column gains a
+   * hole for the time nobody sampled.
+   */
+  const ingest = (t: number): void => {
+    if (scale === undefined) return;
+    const settle = snapPending;
+    snapPending = false;
+    sampler.ingest(
+      {
+        snapshot: engine.snapshot(),
+        events: engine.drain(),
+        trades: engine.drainTrades(),
+        migrations: engine.drainMigrations(),
+        settle,
+        // The HUD and the per-row overlays are independent controls, so the
+        // metric source is needed when either is on: a narrow viewport that
+        // collapses overlays must not blank a HUD the user asked for.
+        ...(state.overlaysOn || state.metricsOn ? { engine } : {}),
+      },
+      t,
+    );
+  };
+  const ingestTimer = setInterval(() => {
+    if (!disposed && !state.paused) ingest(performance.now());
+  }, TRAIL_DT);
+
   const frame = (): void => {
     if (disposed) return;
     raf = requestAnimationFrame(frame);
@@ -222,8 +255,17 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       return;
     }
     // Hover is not book state, so an `on update` cadence would otherwise hold the stale frame.
-    if (state.cadence === "update" && snapshot.version === lastVersion && !sampler.moving() && !hoverDirty) return;
+    if (
+      state.cadence === "update" &&
+      snapshot.version === lastVersion &&
+      !sampler.moving() &&
+      !hoverDirty &&
+      !uiDirty
+    ) {
+      return;
+    }
     hoverDirty = false;
+    uiDirty = false;
     if (t - lastDraw < cap) return;
     // v4 measures dt per rAF; here it spans skipped frames so springs advance in real time at 30 fps.
     const dt = Math.min(0.05, (t - lastT) / 1000);
@@ -246,35 +288,13 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         sampler.reset("grid");
       }
     }
-    const events = engine.drain();
-    const trades = engine.drainTrades();
-    const migrations = engine.drainMigrations();
     // Grouping change: the old ladder freezes and dims, then the first post-ack
     // frame fades in, so rows from two grids are never mixed (spec, story 37).
     const resyncing = snapshot.connection === "RESYNCING";
     if (resyncing) resyncSince = resyncSince ?? t;
     else if (resyncSince !== undefined && snapshot.bids.length > 0) resyncSince = undefined;
-    const settle = snapPending;
-    snapPending = false;
-    const fresh =
-      scale === undefined
-        ? undefined
-        : sampler.sample(
-            // The HUD and the per-row overlays are independent controls, so
-            // the metric source is needed when either is on: a narrow viewport
-            // that collapses overlays must not blank a HUD the user asked for.
-            {
-              snapshot,
-              events,
-              trades,
-              settle,
-              migrations,
-              ...(state.overlaysOn || state.metricsOn ? { engine } : {}),
-            },
-            { height, gridTick, ruler: state.ruler },
-            t,
-            dt,
-          );
+    ingest(t);
+    const fresh = scale === undefined ? undefined : sampler.project({ height, gridTick, ruler: state.ruler }, t, dt);
     // While resyncing, keep painting the frozen frame dimmed rather than an empty ladder.
     const S = resyncing ? (fresh ?? lastFrame) : fresh;
     const fade = resyncSince === undefined ? 1 : Math.max(RESYNC_DIM, 1 - (t - resyncSince) / RESYNC_FADE_MS);
@@ -316,6 +336,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   return {
     update: (next) => {
       state = next;
+      uiDirty = true;
       applyWantedGrid();
     },
     setHover: (y) => {
@@ -327,6 +348,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       disposed = true;
       cancelAnimationFrame(raf);
       clearInterval(hostTick);
+      clearInterval(ingestTimer);
       observer.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
       stopFeed();
