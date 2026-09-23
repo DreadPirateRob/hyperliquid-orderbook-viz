@@ -54,4 +54,22 @@ describe("trade attribution", () => {
     a.prune(15_200);
     expect(a.split("bid", tick(1000), 1, 0, 15_300).consumed).toBe(0);
   });
+
+  it("keeps its answer after pruning drops an expired prefix", () => {
+    const a = createAttribution();
+    // A big old print that must expire, then a small recent one.
+    a.addTrade({ px: tick(1000), sz: 100, side: "A", time: 0 }, 0);
+    a.addTrade({ px: tick(1000), sz: 1, side: "A", time: 0 }, 16_000);
+    const before = a.split("bid", tick(1000), 200, 15_000, 16_000);
+    expect(before).toEqual({ consumed: 1, cancelled: 199 });
+
+    a.prune(16_000);
+    // Cleanup must not change what the window says: the expired print is gone,
+    // not folded into the survivors' running totals.
+    expect(a.split("bid", tick(1000), 200, 15_000, 16_000)).toEqual(before);
+
+    // And the index must still be correct for prints added after compaction.
+    a.addTrade({ px: tick(1000), sz: 2, side: "A", time: 0 }, 16_500);
+    expect(a.split("bid", tick(1000), 200, 16_000, 17_000)).toEqual({ consumed: 2, cancelled: 198 });
+  });
 });

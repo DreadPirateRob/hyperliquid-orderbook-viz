@@ -77,6 +77,13 @@ type PriceBucket = {
   readonly bid: number[];
   /** Cumulative size hitting the ask, by index. */
   readonly ask: number[];
+  /**
+   * Cumulative totals already dropped by `prune`. The sums that survive are
+   * absolute, so a query whose lower bound precedes the first surviving entry
+   * has to subtract what was removed — otherwise cleanup silently re-counts
+   * expired prints as consumed volume.
+   */
+  base: { bid: number; ask: number };
 };
 
 /**
@@ -109,7 +116,8 @@ export function createAttribution(): Attribution {
     const hi = upperBound(bucket.rx, to) - 1;
     if (hi < lo) return 0;
     const cum = bucket[side];
-    return (cum[hi] ?? 0) - (lo > 0 ? (cum[lo - 1] ?? 0) : 0);
+    const start = lo > 0 ? (cum[lo - 1] ?? 0) : bucket.base[side];
+    return (cum[hi] ?? 0) - start;
   };
 
   return {
@@ -118,7 +126,7 @@ export function createAttribution(): Attribution {
       const side: Side = trade.side === "B" ? "ask" : "bid";
       let bucket = byPrice.get(trade.px);
       if (bucket === undefined) {
-        bucket = { rx: [], bid: [], ask: [] };
+        bucket = { rx: [], bid: [], ask: [], base: { bid: 0, ask: 0 } };
         byPrice.set(trade.px, bucket);
       }
       const last = bucket.rx.length - 1;
@@ -204,6 +212,9 @@ export function createAttribution(): Attribution {
           byPrice.delete(px);
           continue;
         }
+        // Remember what the dropped prefix already accounted for; the
+        // surviving sums stay absolute.
+        bucket.base = { bid: bucket.bid[drop - 1] ?? 0, ask: bucket.ask[drop - 1] ?? 0 };
         bucket.rx.splice(0, drop);
         bucket.bid.splice(0, drop);
         bucket.ask.splice(0, drop);
