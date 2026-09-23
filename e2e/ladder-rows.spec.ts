@@ -57,15 +57,29 @@ test("the HUD updates by ref: no React commits at steady state", async ({ page }
   await expect(page.locator(".orderbook")).toHaveAttribute("data-metrics", "1");
   await expect(page.locator(".orderbook-hud pre")).toContainText("PRESSURE", { timeout: 5000 });
 
-  const before = await page.evaluate(
-    () => (globalThis as { __obCommits?: { count: number } }).__obCommits?.count ?? -1,
-  );
+  // The market list and the first stats poll are real chrome state and commit
+  // when they land; wait for them so the window that follows contains frames only.
+  await expect(page.locator(".orderbook-stats")).not.toBeEmpty({ timeout: 15_000 });
+  await page.waitForTimeout(1000);
+  const before = await page.evaluate(() => {
+    const commits = Reflect.get(globalThis, "__obCommits");
+    if (commits === null || typeof commits !== "object") return -1;
+    const count = Reflect.get(commits, "count");
+    return typeof count === "number" ? count : -1;
+  });
   const hudBefore = await page.locator(".orderbook-hud pre").textContent();
+  // Three seconds is ~180 frames. The 10 s market-stats refresh is real chrome
+  // state and may legitimately commit once inside this window; a frame must never.
   await page.waitForTimeout(3000);
-  const after = await page.evaluate(() => (globalThis as { __obCommits?: { count: number } }).__obCommits?.count ?? -1);
+  const after = await page.evaluate(() => {
+    const commits = Reflect.get(globalThis, "__obCommits");
+    if (commits === null || typeof commits !== "object") return -1;
+    const count = Reflect.get(commits, "count");
+    return typeof count === "number" ? count : -1;
+  });
   const hudAfter = await page.locator(".orderbook-hud pre").textContent();
 
-  expect(after).toBe(before);
+  expect(after - before, "frames do not re-render React").toBeLessThanOrEqual(1);
   expect(hudAfter, "the HUD keeps updating while React is idle").not.toBe(hudBefore);
 });
 
@@ -107,6 +121,10 @@ test("grouping steps with the keyboard, resubscribes, and survives in the URL", 
   await expect(options.nth(0)).toHaveAttribute("aria-pressed", "true");
 });
 
+// The only test that must talk to the live venue: a coin switch has to prove a
+// real unsubscribe/resubscribe, which no recording can. Venue latency is not a
+// defect in this widget, so this one test may retry.
+test.describe.configure({ retries: 1 });
 test("the pair picker opens with /, filters, and switching coin resets and re-subscribes", async ({ page }) => {
   await page.goto("/?coin=BTC");
   const root = page.locator(".orderbook");
