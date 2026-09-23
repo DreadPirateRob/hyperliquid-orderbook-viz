@@ -1,3 +1,4 @@
+import { TRAIL_MS } from "../state/trail";
 import { describe, expect, it } from "vitest";
 import * as Tick from "../domain/tick";
 import { pulseState, rowAtY, tagY, trailX, yOf } from "./ladder";
@@ -40,10 +41,12 @@ describe("trailX", () => {
   it("places the newest sample at the right edge and glides it left by the elapsed fraction", () => {
     const now = 100_000;
     expect(trailX(now, now, 8, 480)).toBe(488);
-    expect(trailX(now - 12_000, now, 8, 480)).toBe(8);
-    // 100 ms after a sample: 100/12000 of the column, i.e. 4 px, without waiting for the next sample
-    expect(trailX(now - 100, now, 8, 480)).toBeCloseTo(488 - 4, 6);
-    expect(trailX(now - 13_000, now, 8, 480)).toBeLessThan(8);
+    expect(trailX(now - TRAIL_MS, now, 8, 480)).toBe(8);
+    // 100 ms after a sample the strip has glided 100/TRAIL_MS of the column,
+    // without waiting for the next sample.
+    expect(trailX(now - 100, now, 8, 480)).toBeCloseTo(488 - (480 * 100) / TRAIL_MS, 6);
+    // Older than the window: off the left edge, where the caller clips it.
+    expect(trailX(now - TRAIL_MS - 1000, now, 8, 480)).toBeLessThan(8);
   });
 });
 

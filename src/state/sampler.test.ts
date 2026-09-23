@@ -4,7 +4,7 @@ import type { Level, Trade } from "../data/feed-events.types";
 import * as Tick from "../domain/tick";
 import { createLevelHistory } from "./level-history";
 import { createTape } from "./tape";
-import { SAT_FLOOR } from "./trail";
+import { SAT_FLOOR, TRAIL_MS } from "./trail";
 import { ROW, createSampler } from "./sampler";
 import type { FrameInput } from "./sampler";
 
@@ -209,7 +209,7 @@ function tr(px: number, side: "B" | "A"): Trade {
 }
 
 describe("trails and last trade", () => {
-  it("samples level and touch trails every 250 ms and keeps 12 s", () => {
+  it("samples level and touch trails every 250 ms and keeps the trail window", () => {
     const s = sampler();
     const snap = book([lvl(1000, 4)], [lvl(1010, 6)]);
     let f = sample(
@@ -223,11 +223,15 @@ describe("trails and last trade", () => {
     expect(f?.midTrail).toEqual([{ t: 0, b: 1000, a: 1010, share: 0.4 }]);
     f = sample(s, input(snap), geometry, 200, 0.016);
     expect(f?.midTrail.length, "no new sample before 250 ms").toBe(1);
-    for (let t = 251; t <= 13_000; t += 251) f = sample(s, input(snap), geometry, t, 0.016);
+    // Run past the window so pruning is exercised, not just accumulation.
+    const end = TRAIL_MS + 1000;
+    for (let t = 251; t <= end; t += 251) f = sample(s, input(snap), geometry, t, 0.016);
     const trail = f?.rows.find((r) => r.px === 1000)?.trail ?? [];
-    expect(trail[0]?.t).toBeGreaterThanOrEqual(13_000 - 12_000 - 251);
-    expect(trail.length).toBeGreaterThan(40);
-    expect(trail.length).toBeLessThanOrEqual(50);
+    expect(trail[0]?.t, "nothing older than the window survives").toBeGreaterThanOrEqual(end - TRAIL_MS - 251);
+    // One sample per 251 ms of window, give or take the sample straddling the edge.
+    const expected = TRAIL_MS / 251;
+    expect(trail.length).toBeGreaterThan(expected - 3);
+    expect(trail.length).toBeLessThanOrEqual(expected + 3);
     expect(f?.midTrail.length).toBe(trail.length);
   });
 
@@ -390,7 +394,7 @@ describe("ingestion independent of painting", () => {
     const f = s.project(geometry, 3000, 0.016);
     if (f === undefined) throw new Error("expected a frame");
 
-    // 12 s of history at 250 ms: a gapless run of samples up to now.
+    // A gapless run of samples up to now, at one per 250 ms.
     const trail = f.rows.find((r) => r.trail.length > 0)?.trail ?? [];
     expect(trail.length).toBeGreaterThanOrEqual(11);
     const gaps = trail.slice(1).map((sm, i) => sm.t - (trail[i]?.t ?? sm.t));

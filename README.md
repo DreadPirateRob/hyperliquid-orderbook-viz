@@ -42,7 +42,7 @@ A level that changes does not simply redraw. It pulses by _kind_: an outline for
 
 ![Trail column](docs/images/trails.png)
 
-The left column is twelve seconds of history for every visible level: one tile per sample, coloured by that level's size at the time. A level that has been sitting there for ten seconds looks nothing like one that appeared 400 ms ago.
+The left column is thirty seconds of history for every visible level: one tile per sample, coloured by that level's size at the time. A level that has been sitting there for ten seconds looks nothing like one that appeared 400 ms ago.
 
 Drawn over it are the bid and ask touch paths — where the best bid and best ask have actually been — with a white dot at each print and a price tag at the right edge. The tag prints only when the real BBO is known: after a grouping change the engine keeps the true touch rather than showing an aggregated price that would look precise and be wrong.
 
@@ -218,10 +218,10 @@ Measured on AMD Ryzen 7 4700U with Radeon Graphics (8 cores), Node v26.8.1, 2026
 
 | Synthetic rate | Sustained | apply p50 | apply p99 | Heap delta |
 | --- | --- | --- | --- | --- |
-| 1,000/s (33x live) | 81,540/s | 4.4 us | 77.8 us | -11.1 MB |
-| 10,000/s (333x live) | 94,325/s | 3.42 us | 65.79 us | 15.9 MB |
-| 50,000/s (1667x live) | 50,464/s | 3.35 us | 163.92 us | 15.8 MB |
-| 100,000/s (3333x live) | 30,445/s | 3.77 us | 320.09 us | 135.3 MB |
+| 1,000/s (33x live) | 59,087/s | 4.68 us | 131.69 us | -11.1 MB |
+| 10,000/s (333x live) | 91,221/s | 3.35 us | 73.39 us | 15.2 MB |
+| 50,000/s (1667x live) | 47,562/s | 3.35 us | 184.69 us | 26.1 MB |
+| 100,000/s (3333x live) | 31,524/s | 3.42 us | 307.45 us | 136.5 MB |
 
 **Render — emulated.** The widget replaying `btc-perp-active.jsonl.gz` at speed 1 in headless Chromium, telemetry read from its own HUD.
 
@@ -229,6 +229,6 @@ Scope: two viewports at the 60 fps cadence, sampled for 15 s after a 5 s warm-up
 
 | Viewport | fps | frame p50 | frame p95 |
 | --- | --- | --- | --- |
-| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 2.8 ms | 3.7 ms |
-| phone 390x844 DPR 3, 60 fps cap | 60 fps | 1.1 ms | 1.5 ms |
+| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 2.4 ms | 3.3 ms |
+| phone 390x844 DPR 3, 60 fps cap | 60 fps | 1 ms | 1.3 ms |
 <!-- bench:end -->

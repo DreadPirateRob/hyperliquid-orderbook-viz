@@ -41,7 +41,7 @@ That makes history move under the viewer. Measured on `btc-perp-quiet` with the 
 
 The trail column is a record of what happened. `rel` and `sat` are therefore computed once, when the sample is taken, and stored on it; the renderer reads them and never recomputes. Under the same measurement the new rule re-shades 0 of 43. Live cells — the heat block, the spine — still normalise against the current frame, because they _are_ the current frame.
 
-The cost is accepted and real: tiles from different moments no longer share one denominator, so comparing two columns of the strip compares sizes normalised at their own instants rather than on a single scale. Stability of history was judged worth more than a common scale across a 12 s window.
+The cost is accepted and real: tiles from different moments no longer share one denominator, so comparing two columns of the strip compares sizes normalised at their own instants rather than on a single scale. Stability of history was judged worth more than a common scale across the trail window.
 
 The sampling denominator is the last projected frame's `maxSz` (at most one sample stale, since trails are sampled on the ingest timer rather than at paint). Before the first projection there is no ruler, so the largest live level stands in.
 
@@ -54,3 +54,9 @@ So a sweep blanked the column. A price that was an ask and is now a bid looked u
 A trail is the record of what happened at a **price**, so it is stored per price. Live state — size, spring, pulses, ghost width — stays per side, because it describes a resting order on one side of the book and nothing about it survives the flip. Where both sides hold an entry for one price (the level just flipped and the old side is a zero awaiting its 60 s eviction) the live entry speaks for the price, and the more recently changed one breaks the tie.
 
 Each sample records the side it was taken on, and the renderer colours the tile from that rather than from the row. A sweep therefore leaves a legible seam — ask-coloured history above bid-coloured history at the same price — instead of repainting the past in the new side's colour, which would undo the freeze decision recorded above. Spread rows draw their trail for the same reason: the moment a level is swallowed is the moment most worth seeing.
+
+## Amendment (Trail window is 30 s, not v4's 12 s)
+
+Twelve seconds shows a sweep or its aftermath, rarely both. Thirty holds the excursion and the recovery in one view, which is the span worth reading when the question is "what happened at this price".
+
+The window is the only constant that changes: sampling stays at `TRAIL_DT`, so a level now retains 120 samples instead of 48, and a tile is `w / 120` of the trail column. Measured across the widths that show trails at all (the column is dropped below 900 px), a tile is 5.25 px at 1500 px, 3.42 px at 1280 px, and 1.92 px at the 900 px breakpoint itself — the only width where it falls under the 2 px floor `trailStrip` enforces, and a 4 % overlap there is not worth a second constant.

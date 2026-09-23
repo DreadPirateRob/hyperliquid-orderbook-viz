@@ -52,7 +52,7 @@ export type LevelHistory = {
   readonly applyTrades: (trades: ReadonlyArray<Trade>, t: number) => void;
   /** Advance springs, prune pulses and dead levels. */
   readonly step: (t: number, dt: number) => void;
-  /** Record every level's live size at `t` and drop samples older than 12 s (called every `TRAIL_DT`). */
+  /** Record every level's live size at `t` and drop samples outside the trail window (called every `TRAIL_DT`). */
   /**
    * Append one trail sample per level.
    *
@@ -203,7 +203,7 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
     },
     sampleTrails: (t, maxSz) => {
       // Shading is decided here, once, against the scale in force at this
-      // instant, and stays with the sample for the rest of its 12 s life.
+      // instant, and stays with the sample for the rest of its life in the window.
       let scale = maxSz;
       if (scale <= 0) for (const e of entries.values()) if (e.live > scale) scale = e.live;
       // One sample per price. A price has at most one live side; when both

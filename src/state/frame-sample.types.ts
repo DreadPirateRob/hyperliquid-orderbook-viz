@@ -67,7 +67,7 @@ export type FrameRow = {
   readonly pulses: ReadonlyArray<Pulse>;
   /** When the level first appeared, for persistence saturation. */
   readonly first: number;
-  /** Size over the last 12 s, oldest first. */
+  /** Size over the trail window, oldest first. */
   readonly trail: ReadonlyArray<TrailSample>;
 };
 

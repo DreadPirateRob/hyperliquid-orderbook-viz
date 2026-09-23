@@ -1,5 +1,11 @@
-/** Trails keep this much history (v4 `TRAIL_MS`); render and state map time with the same window. */
-export const TRAIL_MS = 12_000;
+/**
+ * Trails keep this much history; render and state map time with the same
+ * window. v4 used 12 s; 30 s covers a sweep and its aftermath in one view,
+ * which is the span worth reading. At `TRAIL_DT` that is 120 samples per level
+ * and a tile every `w / 120` px, still above the 2 px floor `trailStrip`
+ * enforces at the widths the trail column is given.
+ */
+export const TRAIL_MS = 30_000;
 /** Trail sampling period (v4 `TRAIL_DT`). */
 export const TRAIL_DT = 250;
 
