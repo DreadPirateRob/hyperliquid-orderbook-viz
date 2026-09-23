@@ -33,25 +33,64 @@ body,
 
 .orderbook {
   display: grid;
-  grid-template-rows: 44px 1fr;
+  /* Two text lines per stat: the value and its caption. */
+  grid-template-rows: 52px 1fr;
 }
 
 .orderbook-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   padding: 0 12px;
   border-bottom: 1px solid #ffffff14;
   font-size: 12px;
 }
 
+/* Left: which market and what it is doing. Right: what the viewer can change. */
+.orderbook-barmarket,
+.orderbook-barcontrols {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.orderbook-barcontrols {
+  gap: 8px;
+}
+
 .orderbook-pair {
   font-weight: 600;
 }
 
-.orderbook-mid {
+.orderbook-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.orderbook-stat-value {
   color: var(--text);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.orderbook-stat[data-size="lead"] .orderbook-stat-value {
+  font-size: 17px;
+}
+
+.orderbook-stat[data-tone="up"] .orderbook-stat-value {
+  color: var(--bid);
+}
+
+.orderbook-stat[data-tone="dn"] .orderbook-stat-value {
+  color: var(--ask);
+}
+
+.orderbook-stat-label {
+  color: var(--dim);
+  font-size: 10px;
 }
 
 .orderbook-group,

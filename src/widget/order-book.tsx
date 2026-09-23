@@ -337,8 +337,10 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
         openPicker();
       }
       if (e.key === "Escape") {
-        setGearOpen(false);
-        setPickerOpen(false);
+        // Close through the owners, not the raw setters: they return focus to
+        // the trigger. Escape can arrive before a popover has taken focus.
+        closeGear();
+        closePicker();
       }
       if (e.key === " ") {
         e.preventDefault();
@@ -347,7 +349,18 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleTrails, toggleTape, toggleView, toggleOverlays, toggleMetrics, stepGroup, openPicker, togglePause]);
+  }, [
+    toggleTrails,
+    toggleTape,
+    toggleView,
+    toggleOverlays,
+    toggleMetrics,
+    stepGroup,
+    openPicker,
+    togglePause,
+    closeGear,
+    closePicker,
+  ]);
 
   return (
     <div
@@ -365,94 +378,101 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       data-compact={affordances.forcedView === undefined ? "0" : "1"}
     >
       <div className="orderbook-bar">
-        <button
-          type="button"
-          className="orderbook-pair"
-          ref={pairButtonRef}
-          onClick={openPicker}
-          aria-haspopup="dialog"
-        >
-          {markets.find((m) => m.coin === coin)?.display ?? coin}
-        </button>
-        <span className="orderbook-mid" ref={midRef}>
-          –
-        </span>
-        <span className="orderbook-group" ref={groupRef}>
-          –
-        </span>
-        <span className="orderbook-groupseg" role="group" aria-label="grouping">
-          {groups.options.map((o) => (
-            <GroupButton
-              key={o.gridTick}
-              option={o}
-              active={o.gridTick === (gridTick ?? groups.active)}
-              onSelect={selectGroup}
-            />
-          ))}
-        </span>
-        <button
-          type="button"
-          className="orderbook-toggle"
-          aria-pressed={viewShown === "spine"}
-          disabled={affordances.forcedView !== undefined}
-          onClick={toggleView}
-        >
-          {viewShown}
-        </button>
-        <button
-          type="button"
-          className="orderbook-toggle"
-          aria-pressed={trailsShown}
-          disabled={!affordances.trails}
-          onClick={toggleTrails}
-        >
-          trails
-        </button>
-        <button
-          type="button"
-          className="orderbook-toggle"
-          aria-pressed={tapeShown}
-          disabled={!affordances.tape}
-          onClick={toggleTape}
-        >
-          tape
-        </button>
-        <button
-          type="button"
-          className="orderbook-toggle"
-          aria-pressed={overlaysShown}
-          disabled={!affordances.overlays}
-          onClick={toggleOverlays}
-        >
-          overlays
-        </button>
-        <button type="button" className="orderbook-toggle" aria-pressed={metricsOn} onClick={toggleMetrics}>
-          metrics
-        </button>
-        <MarketStatsBar stats={stats[coin]} />
-        <button
-          type="button"
-          className="orderbook-toggle orderbook-icon"
-          aria-pressed={paused}
-          aria-label={paused ? "Resume" : "Pause"}
-          onClick={togglePause}
-        >
-          {paused ? <Play size={12} aria-hidden /> : <Pause size={12} aria-hidden />}
-        </button>
-        <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
-          CONNECTING
-        </span>
-        <button
-          type="button"
-          className="orderbook-toggle orderbook-icon"
-          ref={gearButtonRef}
-          aria-pressed={gearOpen}
-          aria-label="Settings"
-          aria-haspopup="dialog"
-          onClick={toggleGear}
-        >
-          <SettingsIcon size={12} aria-hidden />
-        </button>
+        {/* Left: what market this is and what it is doing. Right: what the viewer can change. */}
+        <div className="orderbook-barmarket">
+          <button
+            type="button"
+            className="orderbook-pair"
+            ref={pairButtonRef}
+            onClick={openPicker}
+            aria-haspopup="dialog"
+          >
+            {markets.find((m) => m.coin === coin)?.display ?? coin}
+          </button>
+          <Stat label="mid" size="lead">
+            <span className="orderbook-mid" ref={midRef}>
+              –
+            </span>
+          </Stat>
+          <MarketStatsBar stats={stats[coin]} />
+        </div>
+        <div className="orderbook-barcontrols">
+          <span className="orderbook-group" ref={groupRef}>
+            –
+          </span>
+          <span className="orderbook-groupseg" role="group" aria-label="grouping">
+            {groups.options.map((o) => (
+              <GroupButton
+                key={o.gridTick}
+                option={o}
+                active={o.gridTick === (gridTick ?? groups.active)}
+                onSelect={selectGroup}
+              />
+            ))}
+          </span>
+          <button
+            type="button"
+            className="orderbook-toggle"
+            aria-pressed={viewShown === "spine"}
+            disabled={affordances.forcedView !== undefined}
+            onClick={toggleView}
+          >
+            {viewShown}
+          </button>
+          <button
+            type="button"
+            className="orderbook-toggle"
+            aria-pressed={trailsShown}
+            disabled={!affordances.trails}
+            onClick={toggleTrails}
+          >
+            trails
+          </button>
+          <button
+            type="button"
+            className="orderbook-toggle"
+            aria-pressed={tapeShown}
+            disabled={!affordances.tape}
+            onClick={toggleTape}
+          >
+            tape
+          </button>
+          <button
+            type="button"
+            className="orderbook-toggle"
+            aria-pressed={overlaysShown}
+            disabled={!affordances.overlays}
+            onClick={toggleOverlays}
+          >
+            overlays
+          </button>
+          <button type="button" className="orderbook-toggle" aria-pressed={metricsOn} onClick={toggleMetrics}>
+            metrics
+          </button>
+          <button
+            type="button"
+            className="orderbook-toggle orderbook-icon"
+            aria-pressed={paused}
+            aria-label={paused ? "Resume" : "Pause"}
+            onClick={togglePause}
+          >
+            {paused ? <Play size={12} aria-hidden /> : <Pause size={12} aria-hidden />}
+          </button>
+          <span className="orderbook-conn" ref={connRef} data-state="CONNECTING">
+            CONNECTING
+          </span>
+          <button
+            type="button"
+            className="orderbook-toggle orderbook-icon"
+            ref={gearButtonRef}
+            aria-pressed={gearOpen}
+            aria-label="Settings"
+            aria-haspopup="dialog"
+            onClick={toggleGear}
+          >
+            <SettingsIcon size={12} aria-hidden />
+          </button>
+        </div>
       </div>
       {pickerOpen ? (
         <PairPicker
@@ -502,20 +522,41 @@ function GroupButton(props: {
   );
 }
 
+/**
+ * One captioned figure. v4 labels every number in the bar, and the port had
+ * dropped the captions: a row of bare numbers does not say which is the mark
+ * and which is funding.
+ */
+function Stat(props: {
+  readonly label: string;
+  readonly size?: "lead";
+  readonly tone?: "up" | "dn";
+  readonly children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <span className="orderbook-stat" data-size={props.size ?? "normal"} data-tone={props.tone ?? "flat"}>
+      <span className="orderbook-stat-value">{props.children}</span>
+      <span className="orderbook-stat-label">{props.label}</span>
+    </span>
+  );
+}
+
 /** Mark, 24 h change, volume and funding for the watched market. */
 function MarketStatsBar(props: { readonly stats: MarketStats | undefined }): JSX.Element {
   const s = props.stats;
   if (s === undefined) return <span className="orderbook-stats" />;
   return (
     <span className="orderbook-stats">
-      <span>{s.mark >= 1000 ? s.mark.toFixed(0) : s.mark.toFixed(4)}</span>
+      <Stat label="mark">
+        {s.mark >= 1000 ? s.mark.toLocaleString("en-US", { maximumFractionDigits: 0 }) : s.mark.toFixed(4)}
+      </Stat>
       {s.changePct === undefined ? null : (
-        <span
-          className={s.changePct >= 0 ? "up" : "dn"}
-        >{`${s.changePct >= 0 ? "+" : ""}${s.changePct.toFixed(2)}%`}</span>
+        <Stat label="24h" tone={s.changePct >= 0 ? "up" : "dn"}>
+          {`${s.changePct >= 0 ? "+" : ""}${s.changePct.toFixed(2)}%`}
+        </Stat>
       )}
-      {s.dayVolume === undefined ? null : <span>{formatVolume(s.dayVolume)}</span>}
-      {s.funding === undefined ? null : <span>{`${(s.funding * 100).toFixed(4)}%`}</span>}
+      {s.dayVolume === undefined ? null : <Stat label="24h vol">{formatVolume(s.dayVolume)}</Stat>}
+      {s.funding === undefined ? null : <Stat label="funding">{`${(s.funding * 100).toFixed(4)}%`}</Stat>}
     </span>
   );
 }

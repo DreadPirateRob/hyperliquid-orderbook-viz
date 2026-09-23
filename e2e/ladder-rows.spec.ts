@@ -57,9 +57,9 @@ test("the HUD updates by ref: no React commits at steady state", async ({ page }
   await expect(page.locator(".orderbook")).toHaveAttribute("data-metrics", "1");
   await expect(page.locator(".orderbook-hud pre")).toContainText("PRESSURE", { timeout: 5000 });
 
-  // The market list and the first stats poll are real chrome state and commit
-  // when they land; wait for them so the window that follows contains frames only.
-  await expect(page.locator(".orderbook-stats")).not.toBeEmpty({ timeout: 15_000 });
+  // Let the mount settle. The market list and the stats poll are REST-bound and
+  // may land inside the window below; the assertion tolerates them by counting
+  // orders of magnitude, so waiting on the venue here would only add flake.
   await page.waitForTimeout(1000);
   const before = await page.evaluate(() => {
     const commits = Reflect.get(globalThis, "__obCommits");
