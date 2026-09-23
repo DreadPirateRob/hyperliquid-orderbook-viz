@@ -10,6 +10,13 @@ import { chromium } from "@playwright/test";
  * user sees rather than a parallel code path.
  */
 
+/**
+ * How the published frame figures are derived: the HUD reports p50/p95 over
+ * its own rolling 120-frame buffer, and the bench takes the median of those
+ * samples across the run. That is a typical frame cost, not a percentile over
+ * every frame in the run, and the README says so.
+ */
+
 /** One viewport's result. */
 export type RenderResult = {
   readonly label: string;
@@ -18,7 +25,9 @@ export type RenderResult = {
   readonly dpr: number;
   readonly cadence: string;
   readonly fps: number;
+  /** Median of the HUD's rolling p50 samples. */
   readonly frameP50Ms: number;
+  /** Median of the HUD's rolling p95 samples. */
   readonly frameP95Ms: number;
   /** Emulated headless Chromium, not a device (ADR 0006). */
   readonly emulated: true;
