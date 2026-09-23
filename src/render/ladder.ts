@@ -1,7 +1,7 @@
 import * as Tick from "../domain/tick";
 import type { FrameRow, FrameSample, Pulse } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
-import { TRAIL_DT, TRAIL_MS } from "../state/trail";
+import { PERSISTENCE_MS, TRAIL_DT, TRAIL_MS } from "../state/trail";
 import type { PriceScale } from "../domain/tick";
 import type { DrawContext } from "./draw.types";
 import { TAPE_W } from "./tape";
@@ -17,7 +17,7 @@ import { FONT, PALETTE, formatSize, pill, rgba, sideColour, text } from "./palet
 /** v4 layout constants. */
 const BLOCK_W = 300;
 const GUTTER_W = 170;
-const PERSISTENCE_MS = 20000;
+
 const RULER_DIM = 0.45;
 
 /** Column x positions (v4's `X`). */
@@ -299,11 +299,13 @@ function trailStrip(
   if (row.side === "spread") return;
   const cw = (w * TRAIL_DT) / TRAIL_MS;
   const x1 = x0 + w;
-  const sat = 0.35 + 0.65 * persistence(row, S.t);
   for (const s of row.trail) {
     const x = trailX(s.t, S.t, x0, w);
     if (x < x0) continue;
-    const rel = s.sz / S.maxSz;
+    // Shading is read from the sample, never recomputed: the trail is history,
+    // and a past tile must not change colour because the present frame's
+    // largest level changed. Deviation from v4, recorded in ADR 0009.
+    const { rel, sat } = s;
     if (rel <= 0) continue;
     const cx0 = Math.max(x0, x);
     const cx1 = Math.min(x1, x + Math.max(2, cw));

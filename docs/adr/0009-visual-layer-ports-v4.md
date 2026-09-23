@@ -32,3 +32,15 @@ v4 keeps the tape column visible in the spine view. The user's standing preferen
 ## Amendment (Last-trade tag alignment)
 
 v4 places the last-trade tag at `row ? row.y + ROW/2 : S.ribY`. `ribY` is a row **top**, so whenever the last print is not on a visible row — the usual case right after the price leaves the window — the pill renders half a row out of alignment with the ladder. The port keeps v4's on-row placement and replaces the fallback with the nearest row centre (`tagY`), so the tag is always on the row grid.
+
+## Amendment (Trail shading is frozen at sample time)
+
+v4 shades every trail tile against the frame it is being drawn in: `rel = s.sz / S.maxSz`, where `maxSz` is the largest level inside the ruler _right now_, multiplied by the row's _current_ persistence. A trail sample stored only `{t, sz}`, so the whole painted history was re-derived from the present frame, every frame.
+
+That makes history move under the viewer. Measured on `btc-perp-quiet` with the mid frozen, `maxSz` swung 16.4 → 10.2 → 17.1 over two seconds; of 43 tracked `(price, sample time)` tiles, the old rule re-shaded **43 of 43** and flipped **5** across the amber threshold in either direction — a level that was hot when it happened turned side-coloured seconds later because something larger appeared elsewhere, then turned hot again when it left.
+
+The trail column is a record of what happened. `rel` and `sat` are therefore computed once, when the sample is taken, and stored on it; the renderer reads them and never recomputes. Under the same measurement the new rule re-shades 0 of 43. Live cells — the heat block, the spine — still normalise against the current frame, because they _are_ the current frame.
+
+The cost is accepted and real: tiles from different moments no longer share one denominator, so comparing two columns of the strip compares sizes normalised at their own instants rather than on a single scale. Stability of history was judged worth more than a common scale across a 12 s window.
+
+The sampling denominator is the last projected frame's `maxSz` (at most one sample stale, since trails are sampled on the ingest timer rather than at paint). Before the first projection there is no ruler, so the largest live level stands in.

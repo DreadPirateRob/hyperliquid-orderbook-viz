@@ -4,6 +4,7 @@ import type { Level, Trade } from "../data/feed-events.types";
 import * as Tick from "../domain/tick";
 import { createLevelHistory } from "./level-history";
 import { createTape } from "./tape";
+import { SAT_FLOOR } from "./trail";
 import { ROW, createSampler } from "./sampler";
 import type { FrameInput } from "./sampler";
 
@@ -218,7 +219,7 @@ describe("trails and last trade", () => {
       0,
       0.016,
     );
-    expect(f?.rows.find((r) => r.px === 1000)?.trail).toEqual([{ t: 0, sz: 4 }]);
+    expect(f?.rows.find((r) => r.px === 1000)?.trail).toEqual([{ t: 0, sz: 4, rel: 1, sat: SAT_FLOOR }]);
     expect(f?.midTrail).toEqual([{ t: 0, b: 1000, a: 1010, share: 0.4 }]);
     f = sample(s, input(snap), geometry, 200, 0.016);
     expect(f?.midTrail.length, "no new sample before 250 ms").toBe(1);
@@ -228,6 +229,45 @@ describe("trails and last trade", () => {
     expect(trail.length).toBeGreaterThan(40);
     expect(trail.length).toBeLessThanOrEqual(50);
     expect(f?.midTrail.length).toBe(trail.length);
+  });
+
+  it("freezes a trail sample's shading, so a later whale does not repaint history", () => {
+    const s = sampler();
+    const snap = book([lvl(1000, 4)], [lvl(1010, 6)]);
+    let f = sample(
+      s,
+      { snapshot: snap, events: [ev("added", 1000, 0, 4)], trades: [], settle: false },
+      geometry,
+      0,
+      0.016,
+    );
+    const before = [...(f?.rows.find((r) => r.px === 1000)?.trail ?? [])];
+    expect(before.length).toBe(1);
+
+    // A far larger level appears beside it: the scale every later sample is
+    // shaded against moves, but the tiles already taken must not.
+    for (let t = 251; t <= 1000; t += 251) {
+      f = sample(
+        s,
+        {
+          snapshot: book([lvl(1000, 4)], [lvl(1010, 400)]),
+          events: [ev("grew", 1010, 6, 400)],
+          trades: [],
+          settle: false,
+        },
+        geometry,
+        t,
+        0.016,
+      );
+    }
+    const after = f?.rows.find((r) => r.px === 1000)?.trail ?? [];
+    expect(after.length).toBeGreaterThan(before.length);
+    expect(after.slice(0, before.length), "samples taken before the whale are untouched").toEqual(before);
+    // `shown` is spring-smoothed, so the scale climbs toward the whale rather
+    // than jumping; the point is that later samples follow it and earlier ones do not.
+    expect(after.at(-1)?.rel, "samples taken after it are shaded against the new scale").toBeLessThan(
+      before[0]?.rel ?? 1,
+    );
   });
 
   it("tracks the last print and its direction against the previous print", () => {

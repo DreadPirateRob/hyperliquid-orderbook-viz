@@ -3,7 +3,7 @@ import type { Side, Trade } from "../data/feed-events.types";
 import type { Tick } from "../domain/tick";
 import { casesHandled } from "../shared/result";
 import type { Pulse, TrailSample } from "./frame-sample.types";
-import { TRAIL_MS, pruneBefore } from "./trail";
+import { PERSISTENCE_MS, SAT_FLOOR, TRAIL_MS, pruneBefore } from "./trail";
 import { Spring } from "./spring";
 
 /**
@@ -54,7 +54,13 @@ export type LevelHistory = {
   /** Advance springs, prune pulses and dead levels. */
   readonly step: (t: number, dt: number) => void;
   /** Record every level's live size at `t` and drop samples older than 12 s (called every `TRAIL_DT`). */
-  readonly sampleTrails: (t: number) => void;
+  /**
+   * Append one trail sample per level.
+   *
+   * @param t - Frame time.
+   * @param maxSz - Largest level size in the ruler as of the last projected frame; the shading denominator.
+   */
+  readonly sampleTrails: (t: number, maxSz: number) => void;
   /** Look up one level's state. */
   readonly get: (side: Side, px: Tick) => LevelState | undefined;
   /** True while any spring or pulse is live. */
@@ -174,9 +180,21 @@ export function createLevelHistory(options: LevelHistoryOptions): LevelHistory {
         if (e.live === 0 && t - e.lastChanged > DEAD_MS && e.pulses.length === 0) entries.delete(k);
       }
     },
-    sampleTrails: (t) => {
+    sampleTrails: (t, maxSz) => {
+      // Before the first projection there is no ruler and so no scale. Falling
+      // back to the largest live level keeps the first samples on the same 0..1
+      // footing as every later one, instead of shading them against 1.
+      let scale = maxSz;
+      if (scale <= 0) for (const e of entries.values()) if (e.live > scale) scale = e.live;
       for (const e of entries.values()) {
-        e.trail.push({ t, sz: e.live });
+        // Shading is decided here, once, against the scale in force at this
+        // instant, and stays with the sample for the rest of its 12 s life.
+        e.trail.push({
+          t,
+          sz: e.live,
+          rel: scale > 0 ? e.live / scale : 0,
+          sat: SAT_FLOOR + (1 - SAT_FLOOR) * Math.min(1, (t - e.first) / PERSISTENCE_MS),
+        });
         pruneBefore(e.trail, t - TRAIL_MS);
       }
     },

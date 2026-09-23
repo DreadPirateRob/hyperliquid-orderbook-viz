@@ -3,6 +3,11 @@ export const TRAIL_MS = 12_000;
 /** Trail sampling period (v4 `TRAIL_DT`). */
 export const TRAIL_DT = 250;
 
+/** Saturation ramp: a level reaches full trail saturation this long after it is first seen (v4 `persistence`). */
+export const PERSISTENCE_MS = 20_000;
+/** Saturation of a level the instant it appears; the rest ramps in over `PERSISTENCE_MS`. */
+export const SAT_FLOOR = 0.35;
+
 /**
  * Drop leading samples older than `cutoff` from a time-ordered buffer.
  *

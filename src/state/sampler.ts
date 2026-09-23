@@ -94,6 +94,11 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
   const anchor = new Spring(0, ANCHOR_K, ANCHOR_C);
   let anchorSet = false;
   let lastTrail = -Infinity;
+  // The shading scale is a projection quantity (it depends on the ruler), but
+  // trails are sampled on the ingest timer, which may run without a paint. The
+  // last projected scale is the right denominator: at most one sample old, and
+  // frozen into the sample so it never moves again.
+  let lastMaxSz = 0;
   const live: Migration[] = [];
   const midTrail: MidSample[] = [];
   let lastTrade: FrameSample["lastTrade"];
@@ -125,7 +130,7 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
       // strict comparison drops every other sample, halving trail resolution.
       if (t - lastTrail >= TRAIL_DT) {
         lastTrail = t;
-        history.sampleTrails(t);
+        history.sampleTrails(t, lastMaxSz);
         midTrail.push({ t, b: bb.px, a: aa.px, share: bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5 });
         pruneBefore(midTrail, t - TRAIL_MS);
       }
@@ -175,13 +180,14 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
         if (r.cum > maxCum) maxCum = r.cum;
         if (Math.abs(r.field) > maxField) maxField = Math.abs(r.field);
       }
+      lastMaxSz = maxSz || 1;
       const share = bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5;
       const lo = out[Math.max(0, midIdx - geometry.ruler)];
       const hi = out[Math.min(out.length - 1, midIdx + geometry.ruler - 1)];
       return {
         t,
         rows: out,
-        maxSz: maxSz || 1,
+        maxSz: lastMaxSz || 1,
         maxCum: maxCum || 1,
         maxField: maxField || 1,
         ribY,

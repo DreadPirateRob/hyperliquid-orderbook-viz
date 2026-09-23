@@ -16,10 +16,24 @@ export type Pulse = {
   readonly t0: number;
 };
 
-/** One trail sample: the level's live size at frame time `t`. */
+/**
+ * One trail sample: the level's live size at frame time `t`, plus the shading
+ * it was drawn with when it was taken.
+ *
+ * The trail is history. Re-deriving a past tile's colour from the present
+ * frame — which is what normalising against the current `maxSz` does — makes
+ * painted history change under the viewer: a level that was hot when it
+ * happened turns side-coloured the moment a larger level appears anywhere in
+ * the ruler, and back again when it leaves. `rel` and `sat` are therefore
+ * frozen at sample time and never recomputed.
+ */
 export type TrailSample = {
   readonly t: number;
   readonly sz: number;
+  /** Size relative to the ruler's largest level as it stood when sampled; drives hue and alpha. */
+  readonly rel: number;
+  /** The level's persistence when sampled; scales alpha. */
+  readonly sat: number;
 };
 
 /** One sample of the touch: best bid/ask ticks and bid share at frame time `t`. */
