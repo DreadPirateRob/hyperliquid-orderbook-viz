@@ -86,6 +86,13 @@ class Session {
         rx: Date.now(),
       });
       this.listener({ _tag: "connection", event: { _tag: "closed", reason: meta.error.message }, rx: Date.now() });
+      // A coin the venue does not list will never resolve; anything else is a
+      // transient integration failure, and without a retry the widget stays
+      // disconnected for the session even once connectivity returns.
+      if (meta.error._tag !== "UnknownCoin" && !this.stopped) {
+        clearTimeout(this.reconnect);
+        this.reconnect = setTimeout(() => void this.boot(), RECONNECT_MS);
+      }
       return;
     }
     const mark = meta.value.mark ?? 1;
@@ -145,7 +152,11 @@ class Session {
    */
   readonly select = (coin: string, precision: Precision): void => {
     if (coin !== this.options.coin || this.scale === undefined) return;
-    if (this.gate === undefined) {
+    const ws = this.ws;
+    // Desired precision is not transport state: while the socket is closed or
+    // still opening, remember it and let the next `open` subscribe with it.
+    // Mutating the old gate here would lose the choice on reconnect.
+    if (this.gate === undefined || ws === undefined || ws.readyState !== ws.OPEN) {
       this.wanted = precision;
       return;
     }
@@ -179,6 +190,20 @@ class Session {
         JSON.stringify({ method: "subscribe", subscription: bookSubscription(this.options.coin, stream, precision) }),
       );
     }
+  }
+
+  /**
+   * The same `nSigFigs` means a coarser or finer step once the mid crosses a
+   * power of ten. The gate checks conformance against the grid, so it has to
+   * follow: this is driven from `bbo`, which is not gated, so the new grid is
+   * in force before the first book push that uses it.
+   */
+  private followDecade(mid: number): void {
+    if (this.scale === undefined || this.precision === undefined || this.gate === undefined) return;
+    if (!Number.isFinite(mid) || mid <= 0) return;
+    if (Math.floor(Math.log10(mid)) === Math.floor(Math.log10(this.mark))) return;
+    this.mark = mid;
+    this.gate.adoptGrid(Grouping.gridTickFor(mid, this.precision, this.scale));
   }
 
   private bookSubscription(stream: DepthStream): Record<string, unknown> {
@@ -224,6 +249,12 @@ class Session {
         for (const l of ev.bids) prices.push(l.px);
         for (const l of ev.asks) prices.push(l.px);
         if (this.gate?.accepts(ev.stream, prices) !== true) return;
+        break;
+      }
+      case "bbo": {
+        const bid = ev.bid?.px;
+        const ask = ev.ask?.px;
+        if (bid !== undefined && ask !== undefined) this.followDecade(((bid + ask) / 2) * 10 ** -this.scale.decimals);
         break;
       }
       case "trades":

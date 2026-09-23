@@ -25,6 +25,15 @@ export type SubscriptionGate = {
   readonly accepts: (stream: DepthStream, prices: ReadonlyArray<number>) => boolean;
   /** Ask for a new precision; returns what the adapter should do. */
   readonly select: (precision: Precision, gridTick: number) => GateAction;
+  /**
+   * Adopt a new row step for the precision already subscribed. The same
+   * `nSigFigs` means a different grid once the mid crosses a power of ten, and
+   * conformance is checked against the grid, not the precision: without this a
+   * book that is valid on the new grid is rejected and the ladder freezes.
+   */
+  readonly adoptGrid: (gridTick: number) => void;
+  /** Row step currently enforced, in raw ticks. */
+  readonly grid: () => number;
   /** Record an acknowledgement; returns a queued change when one is now due. */
   readonly acked: (stream: DepthStream, precision: Precision) => GateAction;
   /** Precision currently subscribed. */
@@ -54,7 +63,12 @@ export function createSubscriptionGate(precision: Precision, gridTick: number): 
       return true;
     },
     select: (next, nextGrid) => {
-      if (samePrecision(next, active) && queued === undefined) return { _tag: "unchanged" };
+      if (samePrecision(next, active) && queued === undefined) {
+        // Same subscription, possibly a different grid: adopt it rather than
+        // reporting "unchanged" and leaving the old step in force.
+        grid = nextGrid;
+        return { _tag: "unchanged" };
+      }
       if (pendingAcks()) {
         queued = { precision: next, gridTick: nextGrid };
         return { _tag: "queued" };
@@ -79,6 +93,10 @@ export function createSubscriptionGate(precision: Precision, gridTick: number): 
       acked.fast = false;
       return { _tag: "resubscribe", from, to: next.precision };
     },
+    adoptGrid: (nextGrid) => {
+      grid = nextGrid;
+    },
+    grid: () => grid,
     active: () => active,
   };
 }

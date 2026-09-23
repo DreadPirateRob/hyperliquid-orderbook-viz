@@ -124,6 +124,8 @@ The gate probe acknowledged both streams at grid 10, requested the same precisio
 
 **Recommendation:** give current-grid conformance an explicit transition independent of precision identity, while retaining acknowledgment/in-flight-message protection. Exercise the live adapter path, not just engine fixture replay. The project's own notes correctly say a real venue decade crossing remains unobserved; this finding concerns the specified synthetic contract and demonstrated gate behavior, not a claim of a captured production incident.
 
+**Resolution (fixed).** The gate gained `adoptGrid(gridTick)` and `grid()`, and `select` at an unchanged precision now adopts the new step instead of reporting `unchanged` and leaving the old one in force. The adapter drives it from `followDecade(mid)`, fed by `bbo` — which is deliberately not gated, so the new grid is active before the first book push that needs it. Two gate tests cover a finer grid after a decade crossing and the same-precision transition.
+
 ### 7. Completed refill watches are counted repeatedly
 
 **Axis:** Spec. **Evidence:** executed.
@@ -184,6 +186,8 @@ A failed initial metadata request emits rejected/closed and returns before creat
 
 **Recommendation:** retry transient boot failures with a bounded delay and disposal cancellation, or expose a clear retry action. Do not retry permanent invalid-market errors indefinitely.
 
+**Resolution (fixed).** A failed metadata boot now schedules a retry on the existing reconnect timer, cancelled by `stop()`. `UnknownCoin` is excluded: a coin the venue does not list will never resolve, so retrying it forever would be a busy loop against a permanent error. Covered in `hyperliquid-feed.test.ts` against a fake socket: one failed boot creates no socket, and the retry reaches one without a reload.
+
 ### 11. Grouping changes can disappear during reconnect
 
 **Axis:** Standards — lifecycle correctness. **Evidence:** source-traced.
@@ -196,6 +200,8 @@ After a socket closes, the previous gate remains. A grouping selection mutates t
 
 **Recommendation:** preserve desired precision independently of the active subscription and adopt it on the next socket open. Cover selection before boot, during reconnect, and during pending acknowledgments through the same lifecycle model.
 
+**Resolution (fixed).** `select` now treats a closed or still-opening socket the same as a missing gate: the choice is stored as `wanted` — desired state, not transport state — and the `open` handler subscribes with it. Previously it mutated the doomed gate and returned before storing the precision, so the reconnect rebuilt the old subscription. Covered by a test that selects while disconnected and asserts both book streams resubscribe with the chosen `nSigFigs`.
+
 ### 12. A blocked localStorage getter can prevent the app from mounting
 
 **Axis:** Standards — boundary error handling. **Evidence:** source-traced.
@@ -207,6 +213,8 @@ After a socket closes, the previous gate remains. A grouping selection mutates t
 **Standard:** expected environment/persistence failures should be handled at the boundary; the prefs module explicitly states that bad preferences must not prevent rendering.
 
 **Recommendation:** acquire browser storage inside a guarded boundary and pass `undefined` when unavailable. Retain the existing in-memory/default preference behavior. This is a robustness issue, not a demonstrated security exploit.
+
+**Resolution (fixed).** `main.tsx` reads `localStorage` through a guarded `browserStorage()` that returns `undefined` when the getter throws. The prefs store already supported a missing backend, so the widget mounts with defaults instead of failing before React.
 
 ### 13. Corrupt compressed fixtures escape the declared Result contract
 
@@ -221,6 +229,8 @@ The probe supplied gzip magic bytes followed by invalid/truncated content and ob
 **Standard:** adopted coding standards, “Expected failures are values”; parser and adapter errors must remain inside the stated contract.
 
 **Recommendation:** classify decompression/decoding failures at the fixture adapter boundary and return the appropriate tagged error. Keep a malformed compressed-input regression.
+
+**Resolution (fixed).** Decompression and decoding moved inside the adapter's `try`, returning `FixtureUnavailable` with the cause. New `fixture-loader.test.ts` covers a corrupt gzip body, a body that is not a recording, and a failed request — all as values.
 
 ### 14. React state updater functions perform external side effects
 

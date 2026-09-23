@@ -178,3 +178,31 @@ describe("grid change at fixed precision", () => {
     ).toEqual([10, 100]);
   });
 });
+
+describe("grid changes under a fixed precision", () => {
+  it("adopts a finer grid when the mid crosses a decade, without resubscribing", () => {
+    const precision: Precision = { _tag: "aggregated", nSigFigs: 5, mantissa: undefined };
+    const gate = createSubscriptionGate(precision, 10);
+    gate.acked("slow", precision);
+    gate.acked("fast", precision);
+    expect(gate.accepts("slow", [1000, 990]), "on the coarse grid").toBe(true);
+    expect(gate.accepts("slow", [1001]), "off the coarse grid").toBe(false);
+
+    // The price fell through a power of ten: same nSigFigs, finer step.
+    gate.adoptGrid(1);
+    expect(gate.grid()).toBe(1);
+    expect(gate.accepts("slow", [1001]), "valid on the finer grid").toBe(true);
+  });
+
+  it("adopts the grid even when the precision is unchanged", () => {
+    const precision: Precision = { _tag: "aggregated", nSigFigs: 5, mantissa: undefined };
+    const gate = createSubscriptionGate(precision, 10);
+    gate.acked("slow", precision);
+    gate.acked("fast", precision);
+
+    // Asking for the same precision on a new grid is not a no-op: the grid moves.
+    expect(gate.select(precision, 1)).toEqual({ _tag: "unchanged" });
+    expect(gate.grid()).toBe(1);
+    expect(gate.accepts("slow", [1001])).toBe(true);
+  });
+});

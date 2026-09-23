@@ -31,13 +31,13 @@ function sampler(reducedMotion = false) {
 /** The runtime ingests then projects; tests do the same in one step. */
 function sample(
   s: ReturnType<typeof createSampler>,
-  input: Parameters<ReturnType<typeof createSampler>["ingest"]>[0],
-  geometry: Parameters<ReturnType<typeof createSampler>["project"]>[0],
+  frame: Parameters<ReturnType<typeof createSampler>["ingest"]>[0],
+  box: Parameters<ReturnType<typeof createSampler>["project"]>[0],
   t: number,
   dt: number,
 ): ReturnType<ReturnType<typeof createSampler>["project"]> {
-  s.ingest(input, t);
-  return s.project(geometry, t, dt);
+  s.ingest(frame, t);
+  return s.project(box, t, dt);
 }
 
 describe("sampler", () => {

@@ -156,7 +156,8 @@ Things that cost real time, written down so they cost nobody else any.
 - `/info` **rate-limits hard**. Naively, mounting the widget fired four `/info` calls plus a 10 s stats poll and earned a 429 storm. One shared fetch now dedupes in-flight bodies, caches per payload type, and serves the last good body during a 30 s backoff.
 - Spot markets are absent from `metaAndAssetCtxs` entirely; they need `spotMetaAndAssetCtxs`, whose contexts are positional against `spotMeta.universe` and carry `midPx`/`prevDayPx`/`dayNtlVlm` but never funding. Pricing spot from `allMids` alone — as this did at first — yields a bare number with no 24 h change. `allMids` remains the fallback for the ~24 of 305 pairs the venue publishes no context for. Spot rows whose token indexes are missing are skipped rather than half-built.
 - Trades and book pushes have **no guaranteed causal order**, so "consumed vs cancelled" can only ever be a temporal join with a 600 ms grace window — and it is labelled a heuristic everywhere it appears.
-- The mid crossing a power of ten changes what a fixed `nSigFigs` means, so the grid is re-derived when the decade changes.
+- The mid crossing a power of ten changes what a fixed `nSigFigs` means, so the grid is re-derived when the decade changes — in the subscription gate as well as the engine. Conformance is checked against the grid, not the precision, so a gate still holding the boot-time step rejects every price that is valid on the new one and the ladder simply stops. The adapter follows the decade from `bbo`, which is not gated, so the new grid is in force before the first book push that uses it.
+- Desired precision is not transport state. A grouping chosen while the socket is down has to survive the reconnect; mutating the doomed subscription loses it silently, and the user gets their old grouping back with no error to explain it.
 
 **The engine, under load**
 

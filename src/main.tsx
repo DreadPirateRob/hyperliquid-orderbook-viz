@@ -9,6 +9,20 @@ import type { WidgetState } from "./widget/order-book";
 import { OrderBook } from "./widget/order-book";
 import "./widget/theme.css";
 
+/**
+ * Reading `localStorage` can throw before it is ever used: browser policy
+ * turns the getter itself into a `SecurityError` in some embedding and
+ * privacy modes. The prefs store already works without a backend, so the
+ * failure belongs here, not in a crashed mount.
+ */
+function browserStorage(): Storage | undefined {
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Widget params live in the URL (ADR 0008): `replaceState` only, foreign params preserved. */
 function syncUrl(state: WidgetState): void {
   history.replaceState(null, "", writeUrlState(location.href, state));
@@ -31,7 +45,7 @@ async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const urlState = readUrlState(location.search);
   const coin = urlState.coin;
-  const prefs = createPrefsStore(globalThis.localStorage);
+  const prefs = createPrefsStore(browserStorage());
   const fixtureName = params.get("fixture");
   let feed: FeedSource | undefined;
   let feedCoin = coin;

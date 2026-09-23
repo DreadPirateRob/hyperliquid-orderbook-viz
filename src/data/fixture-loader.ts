@@ -44,8 +44,16 @@ export async function loadFixture(
   }
   const head = new Uint8Array(buffer, 0, Math.min(2, buffer.byteLength));
   const gzip = head[0] === 0x1f && head[1] === 0x8b;
-  const text = gzip
-    ? await new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"))).text()
-    : new TextDecoder().decode(buffer);
+  let text: string;
+  try {
+    // Decoding is part of this adapter's contract: a truncated or corrupt
+    // gzip body is an expected failure and must come back as a value, not a
+    // rejected promise the composition root never sees.
+    text = gzip
+      ? await new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream("gzip"))).text()
+      : new TextDecoder().decode(buffer);
+  } catch (cause) {
+    return err(new FixtureUnavailable(url, cause));
+  }
   return parseFixture(text);
 }
