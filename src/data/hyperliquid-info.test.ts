@@ -42,7 +42,9 @@ const ctxs = [
   ],
 ];
 
-const allMids = { BTC: "86000.5", ETH: "3000.5", "@107": "41.23" };
+const allMids = { BTC: "86000.5", ETH: "3000.5", "@107": "41.23", "@999": "7.5" };
+
+const spotCtxs = [spotMeta, [{ midPx: "41.5", prevDayPx: "40.0", dayNtlVlm: "250000" }]];
 
 describe("fetchUniverse", () => {
   it("lists tradeable perps and spot pairs with display names and size decimals", async () => {
@@ -83,10 +85,27 @@ describe("fetchStats", () => {
     expect(r.value["ETH"]?.changePct).toBeCloseTo(-3.225806, 5);
   });
 
-  it("prices spot pairs from allMids and leaves them without funding", async () => {
+  it("prices spot pairs from their own contexts, with a 24 h change and no funding", async () => {
+    const r = await fetchStats(fakeFetch({ metaAndAssetCtxs: ctxs, spotMetaAndAssetCtxs: spotCtxs, allMids }));
+    if (r._tag === "err") throw r.error;
+    const hype = r.value["@107"];
+    expect(hype?.mark).toBeCloseTo(41.5, 6);
+    expect(hype?.changePct).toBeCloseTo(3.75, 6);
+    expect(hype?.dayVolume).toBeCloseTo(250_000, 0);
+    expect(hype?.funding).toBeUndefined();
+  });
+
+  it("falls back to the mids for a spot pair the venue publishes no context for", async () => {
+    const r = await fetchStats(fakeFetch({ metaAndAssetCtxs: ctxs, spotMetaAndAssetCtxs: spotCtxs, allMids }));
+    if (r._tag === "err") throw r.error;
+    expect(r.value["@999"]).toEqual({ mark: 7.5, changePct: undefined, dayVolume: undefined, funding: undefined });
+  });
+
+  it("still reports perps when the spot contexts are unavailable", async () => {
     const r = await fetchStats(fakeFetch({ metaAndAssetCtxs: ctxs, allMids }));
     if (r._tag === "err") throw r.error;
-    expect(r.value["@107"]).toEqual({ mark: 41.23, changePct: undefined, dayVolume: undefined, funding: undefined });
+    expect(r.value["BTC"]?.mark).toBeCloseTo(86_000, 6);
+    expect(r.value["@107"]?.mark).toBeCloseTo(41.23, 6);
   });
 });
 

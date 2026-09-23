@@ -48,11 +48,25 @@ export function PairPicker(props: PairPickerProps): JSX.Element {
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return markets.filter((m) => {
+    const matching = markets.filter((m) => {
       if (tab === "fav" ? !favourites.includes(m.coin) : m.kind !== tab) return false;
       return q === "" || m.display.toLowerCase().includes(q) || m.coin.toLowerCase().includes(q);
     });
-  }, [markets, favourites, tab, query]);
+    // Venue order is neither alphabetical nor useful. Rank by what a trader is
+    // looking for: an exact ticker first, then prefix matches, then the deepest
+    // markets — 24 h notional volume is the only liquidity proxy the stats give.
+    const rank = (m: MarketSummary): number => {
+      if (q === "") return 3;
+      const symbol = m.display.toLowerCase();
+      if (symbol === q || m.coin.toLowerCase() === q) return 0;
+      if (symbol.startsWith(q)) return 1;
+      return 2;
+    };
+    const volume = (m: MarketSummary): number => stats[m.coin]?.dayVolume ?? 0;
+    return matching.toSorted(
+      (a, b) => rank(a) - rank(b) || volume(b) - volume(a) || a.display.localeCompare(b.display),
+    );
+  }, [markets, favourites, tab, query, stats]);
 
   // Changing tab or query restarts the cursor: both come from events, so they reset it there.
   const setTab = useCallback((next: Tab): void => {

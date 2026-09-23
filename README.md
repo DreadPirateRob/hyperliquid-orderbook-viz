@@ -80,7 +80,9 @@ Prints, newest first, aligned with the row they hit: age, direction mark, price,
 
 ![Pair picker](docs/images/pair-picker.png)
 
-`/` opens it: search, Perp / Spot / Saved tabs, arrow keys and Enter, favourites. Prices and 24 h changes come from one shared, deduplicating `/info` fetch. Switching coin resets the engine and resubscribes.
+`/` opens it: search, Perp / Spot / Saved tabs, arrow keys and Enter, favourites. Switching coin resets the engine and resubscribes.
+
+Rows are ranked, not left in venue order: an exact ticker match first, then prefix matches, then by 24 h notional volume — the only liquidity proxy the stats endpoint offers — with an alphabetical tiebreak. Typing `eth` puts ETH above ETHFI regardless of size. Prices and 24 h changes come from one shared, deduplicating `/info` fetch.
 
 ### Settings
 
@@ -152,7 +154,7 @@ Things that cost real time, written down so they cost nobody else any.
 - `levels[0]` is bids descending and `levels[1]` asks ascending — **observed, never documented**. The wire layer asserts it instead of trusting it.
 - The socket drops at 60 s of silence; a ping every ~50 s keeps it. `{nSigFigs: 5, mantissa: 1}` returns HTTP 500 with a null body, so the base grid omits the mantissa.
 - `/info` **rate-limits hard**. Naively, mounting the widget fired four `/info` calls plus a 10 s stats poll and earned a 429 storm. One shared fetch now dedupes in-flight bodies, caches per payload type, and serves the last good body during a 30 s backoff.
-- Spot markets carry no mark in `metaAndAssetCtxs`; their price comes from `allMids`. Spot rows whose token indexes are missing are skipped rather than half-built.
+- Spot markets are absent from `metaAndAssetCtxs` entirely; they need `spotMetaAndAssetCtxs`, whose contexts are positional against `spotMeta.universe` and carry `midPx`/`prevDayPx`/`dayNtlVlm` but never funding. Pricing spot from `allMids` alone — as this did at first — yields a bare number with no 24 h change. `allMids` remains the fallback for the ~24 of 305 pairs the venue publishes no context for. Spot rows whose token indexes are missing are skipped rather than half-built.
 - Trades and book pushes have **no guaranteed causal order**, so "consumed vs cancelled" can only ever be a temporal join with a 600 ms grace window — and it is labelled a heuristic everywhere it appears.
 - The mid crossing a power of ten changes what a fixed `nSigFigs` means, so the grid is re-derived when the decade changes.
 

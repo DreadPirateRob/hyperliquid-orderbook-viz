@@ -28,6 +28,14 @@ const AssetCtx = z.object({
   funding: z.string().nullish(),
 });
 const MetaAndAssetCtxs = z.tuple([Meta, z.array(AssetCtx)]);
+/** Spot contexts carry a mark and a previous day, but never funding. */
+const SpotAssetCtx = z.object({
+  markPx: z.string().nullish(),
+  midPx: z.string().nullish(),
+  prevDayPx: z.string().nullish(),
+  dayNtlVlm: z.string().nullish(),
+});
+const SpotMetaAndAssetCtxs = z.tuple([SpotMeta, z.array(SpotAssetCtx)]);
 
 /** The venue answered, but not with the expected shape. */
 export class InfoMalformed extends Error {
@@ -192,8 +200,9 @@ export async function fetchUniverse(fetchFn: Fetch): Promise<Result<ReadonlyArra
  * @returns Stats keyed by coin, or a tagged info error.
  */
 export async function fetchStats(fetchFn: Fetch): Promise<Result<Record<string, MarketStats>, InfoError>> {
-  const [ctxs, mids] = await Promise.all([
+  const [ctxs, spotCtxs, mids] = await Promise.all([
     info("metaAndAssetCtxs", MetaAndAssetCtxs, fetchFn),
+    info("spotMetaAndAssetCtxs", SpotMetaAndAssetCtxs, fetchFn),
     info("allMids", AllMids, fetchFn),
   ]);
   if (ctxs._tag === "err") return ctxs;
@@ -212,8 +221,27 @@ export async function fetchStats(fetchFn: Fetch): Promise<Result<Record<string, 
       funding: c.funding == null ? undefined : Number(c.funding),
     };
   });
+  // Spot has its own contexts: `allMids` alone gives a price and nothing else,
+  // which is why spot rows used to show a bare mark with no 24 h change.
+  if (spotCtxs._tag === "ok") {
+    const [spotMeta, spotContexts] = spotCtxs.value;
+    spotMeta.universe.forEach((pair, i) => {
+      const c = spotContexts[i];
+      if (c === undefined) return;
+      const mark = Number(c.midPx ?? c.markPx ?? Number.NaN);
+      if (!Number.isFinite(mark)) return;
+      const prev = c.prevDayPx == null ? Number.NaN : Number(c.prevDayPx);
+      out[pair.name] = {
+        mark,
+        changePct: Number.isFinite(prev) && prev !== 0 ? (mark / prev - 1) * 100 : undefined,
+        dayVolume: c.dayNtlVlm == null ? undefined : Number(c.dayNtlVlm),
+        funding: undefined,
+      };
+    });
+  }
+  // Anything the spot contexts did not cover still gets a price from the mids.
   for (const [coin, px] of Object.entries(mids.value)) {
-    if (!coin.startsWith("@")) continue;
+    if (!coin.startsWith("@") || out[coin] !== undefined) continue;
     const mark = Number(px);
     if (!Number.isFinite(mark)) continue;
     out[coin] = { mark, changePct: undefined, dayVolume: undefined, funding: undefined };
