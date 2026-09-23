@@ -74,6 +74,8 @@ With unchanged book data, the probe went from share `50%` and a populated cost t
 
 **Recommendation:** obtain HUD metrics when `metricsOn || overlaysOn`; independently gate the per-row overlay work. Keep the two user controls independent.
 
+**Resolution (fixed).** `runtime.ts` now passes the engine when `state.overlaysOn || state.metricsOn`. Covered by `the metrics HUD keeps its numbers when overlays are off`, which turns overlays off with the HUD open and asserts pressure and churn still read numbers.
+
 ### 4. Settled “on update” mode ignores UI-only changes
 
 **Axis:** Spec. **Evidence:** executed for redraw failure; source-traced for scheduling.
@@ -130,6 +132,8 @@ A probe completed three watches at **1,000 ms, 10,000 ms, and 10,000 ms**. The r
 
 **Recommendation:** record each completed watch exactly once. Keep the overlay's display lifetime separate from the aggregate's completion record.
 
+**Resolution (fixed).** `Watch` carries `recorded`; the aggregate is appended on the transition to complete and never again, while the overlay keeps showing the watch until its 35 s cleanup. Reproduced first in `src/data/level-stats.test.ts`: two completions at 1 s and 10 s reported a 1 s median before the fix, 10 s after.
+
 ### 8. Time-dependent metrics remain cached after their inputs change
 
 **Axis:** Spec. **Evidence:** executed.
@@ -144,6 +148,8 @@ The probe reported pressure **8.7517** at t=1500 and still **8.7517** at t=2500.
 
 **Recommendation:** separate book-dependent and time-dependent cache validity, or invalidate the metric cache on relevant host ticks without forcing a full book snapshot rebuild.
 
+**Resolution (fixed).** The metric cache is now keyed by book version _and_ `cachedAt === now`, so a host tick that advances the clock invalidates it without rebuilding the book. Reproduced first: pressure held at 4.0 across a 1 s gap with no pushes; it now decays with τ = 3 s.
+
 ### 9. Churn excludes additions and growth
 
 **Axis:** Spec. **Evidence:** executed.
@@ -157,6 +163,8 @@ A countable change from size 10 to 20 returned `eventChurn=0` and `volumeChurn=0
 **Contract:** metric definition ticket line 17: `eventChurn = (added + vanished + grew + shrank) / W`; `volumeChurn = Σ|Δsize| / W`.
 
 **Recommendation:** count all qualifying size changes for churn, while keeping decrease-only counters for cancellation ratios. Reuse time buckets if useful, but do not conflate their meanings.
+
+**Resolution (fixed).** Buckets carry `churnCount`/`churnVolume` for every size change alongside the decrease-only `count`/`hits`/`consumed`/`cancelled` used by the cancellation ratios. A 10 to 20 growth now reports 0.2 events/s and 2 coin/s, and the cancel ratio still describes decreases only.
 
 ### 10. A transient metadata failure leaves the live feed permanently disconnected
 

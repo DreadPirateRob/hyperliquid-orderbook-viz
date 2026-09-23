@@ -90,3 +90,19 @@ describe("engine metrics on a recording", () => {
     expect(e.metrics(), "a new version recomputes").not.toBe(first);
   });
 });
+
+describe("metric cache validity", () => {
+  it("re-reads decaying inputs as time passes, not only when the book changes", () => {
+    const e = createEngine({ gridTick: 10 });
+    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 1)], asks: [lvl("101.0", 1)], time: 0, rx: 1000 });
+    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 5)], asks: [lvl("101.0", 1)], time: 0, rx: 1500 });
+    const early = e.metrics().pressure;
+    expect(Math.abs(early)).toBeGreaterThan(0);
+
+    // No further pushes: only the clock moves. The size-delta field decays with
+    // τ = 3 s, so pressure must decay with it.
+    e.apply({ _tag: "tick", rx: 2500 });
+    const later = e.metrics().pressure;
+    expect(Math.abs(later)).toBeLessThan(Math.abs(early));
+  });
+});

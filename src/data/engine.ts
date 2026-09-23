@@ -64,6 +64,12 @@ class BookEngine implements Engine {
   private lastSlowRx = 0;
   private cached: BookSnapshot | undefined;
   private cachedMetrics: Metrics | undefined;
+  /**
+   * Frame time the cached metrics were computed for. Pressure decays with
+   * τ = 3 s and the churn/cancel windows roll, so a cache keyed only by book
+   * version keeps serving a number the clock has already moved past.
+   */
+  private cachedAt = Number.NaN;
   private readonly attribution: Attribution = createAttribution();
   private readonly stats: LevelStats = createLevelStats();
   private migrations: Migration[] = [];
@@ -177,7 +183,7 @@ class BookEngine implements Engine {
 
   readonly metrics = (): Metrics => {
     const cached = this.cachedMetrics;
-    if (cached !== undefined) return cached;
+    if (cached !== undefined && this.cachedAt === this.now) return cached;
     const snapshot = this.snapshot();
     const bb = this.bestBid ?? snapshot.bids[0];
     const aa = this.bestAsk ?? snapshot.asks[0];
@@ -195,6 +201,7 @@ class BookEngine implements Engine {
       ask: this.sideMetrics("ask", snapshot.asks),
     };
     this.cachedMetrics = metrics;
+    this.cachedAt = this.now;
     return metrics;
   };
 

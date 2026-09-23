@@ -260,7 +260,17 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       scale === undefined
         ? undefined
         : sampler.sample(
-            { snapshot, events, trades, settle, migrations, ...(state.overlaysOn ? { engine } : {}) },
+            // The HUD and the per-row overlays are independent controls, so
+            // the metric source is needed when either is on: a narrow viewport
+            // that collapses overlays must not blank a HUD the user asked for.
+            {
+              snapshot,
+              events,
+              trades,
+              settle,
+              migrations,
+              ...(state.overlaysOn || state.metricsOn ? { engine } : {}),
+            },
             { height, gridTick, ruler: state.ruler },
             t,
             dt,

@@ -231,3 +231,20 @@ test("pause freezes the picture while the feed keeps flowing", async ({ page }) 
   await expect(root).toHaveAttribute("data-paused", "0");
   await expect.poll(pixels, { timeout: 5000 }).not.toBe(frozen);
 });
+
+test("the metrics HUD keeps its numbers when overlays are off", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", /LIVE|SUBSCRIBING|CONNECTING/, { timeout: 20_000 });
+  await page.keyboard.press("m");
+  const hud = page.locator(".orderbook-hud pre");
+  await expect(hud).toContainText(/PRESSURE\s+-?\d/, { timeout: 10_000 });
+
+  // Overlays and metrics are independent controls; turning the per-row
+  // overlays off must not blank the panel.
+  await page.keyboard.press("o");
+  await expect(root).toHaveAttribute("data-overlays", "0");
+  await expect(hud).toContainText(/PRESSURE\s+-?\d/, { timeout: 10_000 });
+  await expect(hud).toContainText(/CHURN\/s\s+bid\s+\d/);
+  await expect(hud).not.toContainText("share –");
+});

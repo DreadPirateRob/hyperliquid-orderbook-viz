@@ -33,6 +33,8 @@ export type Watch = {
   readonly before: number;
   done: number | undefined;
   at5s: number | undefined;
+  /** Whether this completion has already been added to the refill window. */
+  recorded: boolean;
 };
 
 /**
@@ -44,10 +46,21 @@ export type Watch = {
 const BUCKET_MS = 250;
 const BUCKETS = Math.ceil(RATIO_WINDOW_MS / BUCKET_MS) + 1;
 
-/** One 250 ms slice of a side's decreases. */
+/**
+ * One 250 ms slice of a side's activity. Churn counts every size change;
+ * the cancellation counters describe decreases only. They are different
+ * questions — "how busy is this side" versus "how much of what left was
+ * pulled" — and conflating them makes a book that is only filling read as
+ * dead.
+ */
 type Bucket = {
   /** Slice index (`floor(t / BUCKET_MS)`); identifies which window this holds. */
   id: number;
+  /** Every qualifying size change in this slice. */
+  churnCount: number;
+  /** Σ|Δsize| over those changes. */
+  churnVolume: number;
+  /** Decreases only, for the cancellation ratios. */
   count: number;
   hits: number;
   consumed: number;
@@ -145,6 +158,8 @@ export function createLevelStats(): LevelStats {
     if (slot === undefined) throw new Error("window ring is not allocated");
     if (slot.id !== id) {
       slot.id = id;
+      slot.churnCount = 0;
+      slot.churnVolume = 0;
       slot.count = 0;
       slot.hits = 0;
       slot.consumed = 0;
@@ -159,16 +174,21 @@ export function createLevelStats(): LevelStats {
       s.field = decayField(s.field, t - s.fieldAt, TAU_F, after - before);
       s.fieldAt = t;
       s.size = after;
-      if (after >= before) return;
-      if (countable) {
+      if (countable && after !== before) {
+        // Churn is every change; the cancellation counters are decreases only.
         const b = bucketAt(side, t);
-        b.count++;
-        b.consumed += split.consumed;
-        b.cancelled += split.cancelled;
-        if (split.consumed > 0) b.hits++;
+        b.churnCount++;
+        b.churnVolume += Math.abs(after - before);
+        if (after < before) {
+          b.count++;
+          b.consumed += split.consumed;
+          b.cancelled += split.cancelled;
+          if (split.consumed > 0) b.hits++;
+        }
       }
+      if (after >= before) return;
       if (s.watch === undefined && before > 0 && (before - after) / before >= RES_TRIGGER) {
-        s.watch = { startedAt: t, before, done: undefined, at5s: undefined };
+        s.watch = { startedAt: t, before, done: undefined, at5s: undefined, recorded: false };
       }
     },
     reattribute: (side, at, previous, next) => {
@@ -197,10 +217,13 @@ export function createLevelStats(): LevelStats {
           if (s.size >= RES_TARGET * w.before) w.done = t - w.startedAt;
           else if (t - w.startedAt >= RES_CAP_MS) w.done = Number.POSITIVE_INFINITY;
         }
-        if (w.done !== undefined && w.at5s !== undefined) {
+        if (w.done !== undefined && w.at5s !== undefined && !w.recorded) {
+          // Exactly once per completed watch: the overlay keeps showing it for
+          // a while longer, but the aggregate must not count it again.
+          w.recorded = true;
           refills[s.side].push({ t, ms: w.done, at5s: w.at5s });
-          if (t - w.startedAt > RES_CAP_MS + 5000) s.watch = undefined;
         }
+        if (w.recorded && t - w.startedAt > RES_CAP_MS + 5000) s.watch = undefined;
       }
     },
     fieldAt: (side, px, t) => {
@@ -228,8 +251,8 @@ export function createLevelStats(): LevelStats {
         hits += b.hits;
         count += b.count;
         if (b.id >= churnFrom) {
-          churnEvents += b.count;
-          churnVolume += b.consumed + b.cancelled;
+          churnEvents += b.churnCount;
+          churnVolume += b.churnVolume;
         }
       }
       // Refills are rare (one per completed resiliency watch): trim by cursor.
@@ -271,5 +294,13 @@ export function createLevelStats(): LevelStats {
 
 /** A fresh ring of empty slices; `id: -1` marks a slot that has never been used. */
 function makeRing(): Bucket[] {
-  return Array.from({ length: BUCKETS }, () => ({ id: -1, count: 0, hits: 0, consumed: 0, cancelled: 0 }));
+  return Array.from({ length: BUCKETS }, () => ({
+    id: -1,
+    churnCount: 0,
+    churnVolume: 0,
+    count: 0,
+    hits: 0,
+    consumed: 0,
+    cancelled: 0,
+  }));
 }
