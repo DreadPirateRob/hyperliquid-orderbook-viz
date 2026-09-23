@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-09-23T03:12:59.359Z",
+  "ranAt": "2026-09-23T04:44:00.134Z",
   "machine": {
     "cpu": "AMD Ryzen 7 4700U with Radeon Graphics",
     "cores": 8,
@@ -19,40 +19,40 @@
       "rate": 1000,
       "seconds": 5,
       "events": 5000,
-      "sustained": 83526,
-      "applyP50Us": 4.33,
-      "applyP99Us": 85,
-      "heapDeltaMb": -11.7,
+      "sustained": 77115,
+      "applyP50Us": 5.24,
+      "applyP99Us": 82.62,
+      "heapDeltaMb": -10.9,
       "synthetic": true
     },
     {
       "rate": 10000,
       "seconds": 5,
       "events": 50000,
-      "sustained": 96796,
-      "applyP50Us": 3.35,
-      "applyP99Us": 65.86,
-      "heapDeltaMb": 14.7,
+      "sustained": 91630,
+      "applyP50Us": 3.77,
+      "applyP99Us": 69.21,
+      "heapDeltaMb": 15.1,
       "synthetic": true
     },
     {
       "rate": 50000,
       "seconds": 5,
       "events": 250000,
-      "sustained": 47878,
-      "applyP50Us": 3.42,
-      "applyP99Us": 178.86,
-      "heapDeltaMb": 24.1,
+      "sustained": 46946,
+      "applyP50Us": 3.77,
+      "applyP99Us": 176.7,
+      "heapDeltaMb": 24.4,
       "synthetic": true
     },
     {
       "rate": 100000,
       "seconds": 5,
       "events": 500000,
-      "sustained": 30953,
+      "sustained": 31251,
       "applyP50Us": 3.77,
-      "applyP99Us": 312.96,
-      "heapDeltaMb": 138.6,
+      "applyP99Us": 305.07,
+      "heapDeltaMb": 137,
       "synthetic": true
     }
   ],
@@ -64,8 +64,8 @@
       "dpr": 1,
       "cadence": "60",
       "fps": 60,
-      "frameP50Ms": 2.5,
-      "frameP95Ms": 3.4,
+      "frameP50Ms": 2.6,
+      "frameP95Ms": 3.5,
       "emulated": true
     },
     {
@@ -76,7 +76,7 @@
       "cadence": "60",
       "fps": 60,
       "frameP50Ms": 1.1,
-      "frameP95Ms": 1.5,
+      "frameP95Ms": 1.4,
       "emulated": true
     }
   ]

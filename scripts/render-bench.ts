@@ -75,13 +75,14 @@ export async function runRenderBench(
       await page.goto(`${baseUrl}/?fixture=btc-perp-active&speed=1`);
       await page.waitForSelector(".orderbook[data-connection='LIVE']", { timeout: 30_000 });
       await page.keyboard.press("m");
-      await page.waitForSelector(".orderbook-hud pre");
+      // The HUD is one row per metric group; render telemetry is its own row.
+      await page.waitForSelector(".orderbook-hud-row");
       // Warm-up: springs settle and the trail column fills before sampling.
       await page.waitForTimeout(5000);
       const samples: Array<[number, number, number]> = [];
       const until = Date.now() + seconds * 1000;
       while (Date.now() < until) {
-        const text = (await page.locator(".orderbook-hud pre").textContent()) ?? "";
+        const text = (await page.locator(".orderbook-hud").textContent()) ?? "";
         const m = HUD.exec(text);
         if (m !== null) samples.push([Number(m[1]), Number(m[2]), Number(m[3])]);
         await page.waitForTimeout(500);
