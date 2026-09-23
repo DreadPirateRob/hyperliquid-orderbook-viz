@@ -156,8 +156,8 @@ Things that cost real time, written down so they cost nobody else any.
 
 **The engine, under load**
 
-- The burst benchmark, not a unit test, exposed the real scaling wall: the attribution join and the metric windows were **arrays that got scanned**. A 15 s print window at one price, a 60 s decrease window per side, and a grace list of open decreases are all trivial at the live 30 events/s and all quadratic when the rate climbs. Indexing them — prints by price with prefix sums and binary search, decreases by price with a cursor, the ratio window as fixed 250 ms buckets — took apply p50 from rate-dependent milliseconds to a flat ~4 µs, and sustained throughput at 100k events/s from 1.4k to 15.8k events/s.
-- There is still a floor, and it is honest: a 15 s window at 100k events/s is inherently ~10⁶ retained prints, so above ~50k events/s the cost is allocation and GC, not lookup. The table below shows it as heap delta, and the numbers are from a laptop 4700U, not a server.
+- The burst benchmark, not a unit test, exposed the real scaling wall: the attribution join and the metric windows were **arrays that got scanned**. A 15 s print window at one price, a 60 s decrease window per side, and a grace list of open decreases are all trivial at the live 30 events/s and all quadratic when the rate climbs. Indexing them — prints by price with prefix sums and binary search, decreases by price with a cursor, the ratio window as fixed 250 ms buckets — took apply p50 from rate-dependent milliseconds to a flat ~4 µs, and sustained throughput at a synthetic 100k events/s from 1,388 to 28,653 events/s — a 20x improvement that no amount of profiling the render path would have found.
+- There is still a floor, and it is honest: a 15 s window at 100k events/s is inherently ~10⁶ retained prints, so above ~50k events/s the cost is allocation and GC, not lookup. That floor is visible in the table: apply p50 stays flat while sustained throughput falls as the heap fills. The table below shows it as heap delta, and the numbers are from a laptop 4700U, not a server.
 - A burst harness that omits the host `tick` measures an engine that never prunes. That is a bug in the harness, not headroom in the engine.
 
 **The browser**
@@ -187,16 +187,16 @@ Measured on AMD Ryzen 7 4700U with Radeon Graphics (8 cores), Node v26.8.1, 2026
 
 | Synthetic rate         | Sustained | apply p50 | apply p99 | Heap delta |
 | ---------------------- | --------- | --------- | --------- | ---------- |
-| 1,000/s (33x live)     | 69,702/s  | 5.17 us   | 89.89 us  | -11.2 MB   |
-| 10,000/s (333x live)   | 57,303/s  | 3.77 us   | 100.5 us  | 11.6 MB    |
-| 50,000/s (1667x live)  | 23,881/s  | 4.26 us   | 322.67 us | 53.1 MB    |
-| 100,000/s (3333x live) | 15,839/s  | 4.82 us   | 526.68 us | 141.7 MB   |
+| 1,000/s (33x live)     | 65,405/s  | 5.31 us   | 105.24 us | -11.3 MB   |
+| 10,000/s (333x live)   | 83,352/s  | 4.33 us   | 77.31 us  | 1.6 MB     |
+| 50,000/s (1667x live)  | 41,314/s  | 4.33 us   | 203.15 us | 44.7 MB    |
+| 100,000/s (3333x live) | 28,653/s  | 4.26 us   | 335.49 us | 131.4 MB   |
 
 **Render — emulated.** The widget replaying that recording at speed 1 in headless Chromium, telemetry read from its own HUD.
 
 | Viewport                           | fps    | frame p50 | frame p95 |
 | ---------------------------------- | ------ | --------- | --------- |
-| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 2.4 ms    | 3.4 ms    |
-| phone 390x844 DPR 3, 60 fps cap    | 60 fps | 1.2 ms    | 1.5 ms    |
+| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 2.6 ms    | 4 ms      |
+| phone 390x844 DPR 3, 60 fps cap    | 60 fps | 1.1 ms    | 1.4 ms    |
 
 <!-- bench:end -->

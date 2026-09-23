@@ -58,6 +58,7 @@ A reviewed, deployed order-book widget for Hyperliquid with a shareable demo URL
 - [Pair picker, REST stats, URL and prefs](issues/26-pairs-rest-state.md): REST universe/stats adapter skipping malformed rows, one shared TTL+429-backoff `/info` fetch, `/` pair popover, gear popover, Zod prefs + URL round-trip; `?g=` replayed through the gate and `rawTouch` gating BBO tags; parity gate passed.
 - [Responsive, touch and accessibility](issues/27-responsive-a11y.md): width caps toggles (tape 1280, trails 900, overlays 600, spine below), root-observed not viewport-observed, pinch replaces the segment on touch, canvas-painted hover, document-level focus trap, canvas text alternative + ≤ 1 Hz live region; gate passed.
 - [Tests hardening, benchmarks, README table](issues/28-proof.md): scenario tests on broken recordings, synthetic burst + emulated render benches writing `bench/results.json` and the README table, mount/unmount leak test, README feature guide with screenshots and a quirks section; the bench exposed and fixed the engine's array-scan scaling wall (apply p50 now flat ~4 us).
+- [Review](issues/14-review.md): manual two-axis review (reviewer agents still 429); found and fixed the attribution queues still being front-spliced (100k/s sustained 15,839 -> 28,653), verified index bounds, layer boundaries, ADR 0005 naming and every README claim; Types And Contracts closed by supersession.
 
 ## Not yet specified
 
