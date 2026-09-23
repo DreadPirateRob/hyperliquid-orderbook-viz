@@ -25,7 +25,6 @@ function input(snapshot: BookSnapshot): FrameInput {
 function sampler(reducedMotion = false) {
   return createSampler(createLevelHistory({ reducedMotion: () => reducedMotion }), createTape(), {
     reducedMotion: () => reducedMotion,
-    notional: () => 100_000,
   });
 }
 

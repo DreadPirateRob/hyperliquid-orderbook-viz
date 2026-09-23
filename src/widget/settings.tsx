@@ -4,9 +4,8 @@ import type { Prefs } from "../state/prefs";
 import { useFocusTrap } from "./focus-trap";
 
 /**
- * The gear popover: the three settings that are preferences rather than
- * shareable state — render cadence, how far the depth ruler reaches, and the
- * notional execution cost is priced at (ADR 0008).
+ * The gear popover: the settings that are preferences rather than shareable
+ * state — render cadence and how far the depth ruler reaches (ADR 0008).
  */
 
 /** Props. */
@@ -20,12 +19,6 @@ const CADENCES: ReadonlyArray<{ readonly value: Prefs["cadence"]; readonly label
   { value: "60", label: "60 fps" },
   { value: "30", label: "30 fps" },
   { value: "update", label: "on update" },
-];
-
-const NOTIONALS: ReadonlyArray<{ readonly value: Prefs["notional"]; readonly label: string }> = [
-  { value: 10_000, label: "$10k" },
-  { value: 100_000, label: "$100k" },
-  { value: 1_000_000, label: "$1M" },
 ];
 
 /**
@@ -53,10 +46,6 @@ export function Settings(props: SettingsProps): JSX.Element {
   );
   const onCadence = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => onChange({ cadence: toCadence(e.target.value) }),
-    [onChange],
-  );
-  const onNotional = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => onChange({ notional: toNotional(e.target.value) }),
     [onChange],
   );
   const onRuler = useCallback(
@@ -88,16 +77,6 @@ export function Settings(props: SettingsProps): JSX.Element {
         <input type="range" min={4} max={40} step={1} value={prefs.ruler} onChange={onRuler} />
         <output>{prefs.ruler} rows</output>
       </label>
-      <label>
-        <span>cost notional</span>
-        <select value={String(prefs.notional)} onChange={onNotional}>
-          {NOTIONALS.map((n) => (
-            <option key={n.value} value={String(n.value)}>
-              {n.label}
-            </option>
-          ))}
-        </select>
-      </label>
     </div>
   );
 }
@@ -105,9 +84,4 @@ export function Settings(props: SettingsProps): JSX.Element {
 /** Parses a select's value back into the preference's domain; anything else keeps 60 fps. */
 function toCadence(value: string): Prefs["cadence"] {
   return value === "30" || value === "update" ? value : "60";
-}
-
-function toNotional(value: string): Prefs["notional"] {
-  const n = Number(value);
-  return n === 10_000 || n === 1_000_000 ? n : 100_000;
 }

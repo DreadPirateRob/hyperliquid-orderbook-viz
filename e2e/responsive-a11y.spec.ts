@@ -30,10 +30,12 @@ test.describe("phone", () => {
       if (!(el instanceof HTMLCanvasElement)) return 0;
       const ctx = el.getContext("2d");
       if (ctx === null) return 0;
-      const dpr = window.devicePixelRatio || 1;
-      // The spine is drawn around the centre of the canvas; count coloured bands down it.
-      const x = Math.round((el.width / dpr / 2 + 40) * dpr);
-      const data = ctx.getImageData(x, 0, 1, el.height).data;
+      // Sample the band around the centre column rather than one x: how far a
+      // bar reaches depends on the book at that instant, but the spine always
+      // paints prices and bars somewhere in this band.
+      const half = Math.round(el.width / 2);
+      const band = Math.round(el.width / 4);
+      const data = ctx.getImageData(half - band, 0, band * 2, el.height).data;
       let lit = 0;
       for (let i = 0; i < data.length; i += 4) {
         const r = data[i] ?? 0;
@@ -43,7 +45,7 @@ test.describe("phone", () => {
       }
       return lit;
     });
-    expect(painted).toBeGreaterThan(50);
+    expect(painted).toBeGreaterThan(2000);
   });
 
   test("pinching the ladder changes the grouping", async ({ page }) => {

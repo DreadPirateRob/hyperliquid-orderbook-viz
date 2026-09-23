@@ -12,7 +12,6 @@ export type HudInput = {
   readonly groupLabel: string;
   readonly snapshot: BookSnapshot;
   readonly metrics: Metrics | undefined;
-  readonly notional: number;
   /** Render telemetry. */
   readonly fps: number;
   readonly frameP50: number;
@@ -37,7 +36,6 @@ export function hudText(input: HudInput): string {
     `CHURN/s  bid ${num(m?.bid.eventChurn, 1)}  ask ${num(m?.ask.eventChurn, 1)}   vol bid ${num(m?.bid.volumeChurn, 2)}  ask ${num(m?.ask.volumeChurn, 2)}`,
     `REFILL   median bid ${ms(m?.bid.medianRefillMs)}  ask ${ms(m?.ask.medianRefillMs)}   @5s bid ${pct(m?.bid.refillAt5s)}  ask ${pct(m?.ask.refillAt5s)}`,
     `CONVEX   bid ${num(m?.bid.convexity, 2)}  ask ${num(m?.ask.convexity, 2)}   (depth share nearest the touch)`,
-    `COST ${notionalLabel(input.notional)}  buy ${bps(m?.costBuy.slippageBps)}${flag(m?.costBuy.exceedsVisibleDepth)}   sell ${bps(m?.costSell.slippageBps)}${flag(m?.costSell.exceedsVisibleDepth)}`,
     "",
     `RENDER   ${input.fps.toFixed(1)} fps   frame p50 ${input.frameP50.toFixed(2)} ms   p95 ${input.frameP95.toFixed(2)} ms`,
   ];
@@ -55,17 +53,4 @@ function pct(v: number | undefined): string {
 function ms(v: number | undefined): string {
   if (v === undefined) return "–";
   return v === Number.POSITIVE_INFINITY ? ">30s" : `${(v / 1000).toFixed(1)}s`;
-}
-
-function bps(v: number | undefined): string {
-  return v === undefined || Number.isNaN(v) ? "–" : `${v.toFixed(1)} bps`;
-}
-
-/** Marks a cost that the visible book could not fill — the number is a floor, not the real cost. */
-function flag(exceeds: boolean | undefined): string {
-  return exceeds === true ? "*" : "";
-}
-
-function notionalLabel(notional: number): string {
-  return notional >= 1e6 ? `$${notional / 1e6}M` : `$${notional / 1000}k`;
 }

@@ -52,7 +52,7 @@ describe("prefs store", () => {
 
   it("works without storage at all", () => {
     const store = createPrefsStore(undefined);
-    store.set({ notional: 1_000_000 });
-    expect(store.get().notional).toBe(1_000_000);
+    store.set({ ruler: 20 });
+    expect(store.get().ruler).toBe(20);
   });
 });

@@ -36,8 +36,6 @@ const metrics = {
     refillAt5s: undefined,
     convexity: undefined,
   },
-  costBuy: { vwap: 100, slippageBps: 0.13, filledFraction: 1, levels: 3, exceedsVisibleDepth: false },
-  costSell: { vwap: 99, slippageBps: 12.5, filledFraction: 0.4, levels: 9, exceedsVisibleDepth: true },
 } satisfies Metrics;
 
 const input = {
@@ -45,7 +43,6 @@ const input = {
   groupLabel: "$1",
   snapshot,
   metrics,
-  notional: 100_000,
   fps: 30.2,
   frameP50: 4.2,
   frameP95: 5.9,
@@ -60,7 +57,6 @@ describe("hudText", () => {
     expect(text).toContain("by count  bid 93%  ask –");
     expect(text).toContain("median bid 2.5s  ask >30s");
     expect(text).toContain("CONVEX   bid 0.30  ask –");
-    expect(text).toContain("COST $100k  buy 0.1 bps   sell 12.5 bps*");
     expect(text).toContain("30.2 fps   frame p50 4.20 ms   p95 5.90 ms");
   });
 

@@ -1,5 +1,3 @@
-import type { PriceScale } from "../domain/tick";
-import type { ExecutionCost } from "./engine-api.types";
 import type { Level } from "./feed-events.types";
 
 /**
@@ -12,47 +10,6 @@ import type { Level } from "./feed-events.types";
 const NEAR_FRACTION = 0.25;
 /** Fewer levels than this and the shape says nothing. */
 const MIN_LEVELS_FOR_CONVEXITY = 4;
-
-/**
- * Cost of taking `notional` quote units from one side, walking from the touch.
- *
- * @param levels - The side, best first.
- * @param notional - Quote units to spend.
- * @param mid - Reference mid in quote units, for slippage.
- * @param scale - Price scale for converting ticks to quote prices.
- * @returns VWAP, slippage in bps, fill fraction, levels touched, and whether the book ran out.
- */
-export function executionCost(
-  levels: ReadonlyArray<Level>,
-  notional: number,
-  mid: number,
-  scale: PriceScale,
-): ExecutionCost {
-  const unit = 10 ** -scale.decimals;
-  let remaining = notional;
-  let filled = 0;
-  let spent = 0;
-  let touched = 0;
-  for (const level of levels) {
-    if (remaining <= 1e-9) break;
-    const px = level.px * unit;
-    const take = Math.min(remaining / px, level.sz);
-    if (take <= 0) continue;
-    filled += take;
-    spent += take * px;
-    remaining -= take * px;
-    touched++;
-  }
-  const vwap = filled > 0 ? spent / filled : Number.NaN;
-  const slippageBps = filled > 0 ? (Math.abs(vwap - mid) / mid) * 1e4 : Number.NaN;
-  return {
-    vwap,
-    slippageBps,
-    filledFraction: (notional - Math.max(0, remaining)) / notional,
-    levels: touched,
-    exceedsVisibleDepth: remaining > 1e-9,
-  };
-}
 
 /**
  * Share of a side's visible depth sitting in the quarter of the price span

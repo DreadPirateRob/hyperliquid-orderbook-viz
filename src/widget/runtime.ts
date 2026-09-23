@@ -34,8 +34,6 @@ export type RuntimeState = {
   readonly view: View;
   /** Chosen grouping step in raw ticks; `undefined` follows the market's default. */
   readonly gridTick: number | undefined;
-  /** Execution-cost notional in quote units. */
-  readonly notional: number;
   readonly trailsOn: boolean;
   readonly tapeOn: boolean;
   readonly overlaysOn: boolean;
@@ -107,7 +105,6 @@ export function createRuntime(options: RuntimeOptions): Runtime {
   const reducedMotion = (): boolean => reducedMotionQuery.matches;
   const sampler: Sampler = createSampler(createLevelHistory({ reducedMotion }), createTape(), {
     reducedMotion,
-    notional: () => state.notional,
   });
   let width = 0;
   let height = 0;
@@ -280,7 +277,6 @@ export function createRuntime(options: RuntimeOptions): Runtime {
               groupLabel,
               snapshot,
               metrics,
-              notional: state.notional,
               fps,
               frameP50: at(0.5),
               frameP95: at(0.95),

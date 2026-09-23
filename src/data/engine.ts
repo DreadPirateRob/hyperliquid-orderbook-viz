@@ -16,7 +16,7 @@ import type {
 import type { BookStream, FeedEvent, Level, Side, Trade } from "./feed-events.types";
 import { createLevelStats } from "./level-stats";
 import type { LevelStats } from "./level-stats";
-import { convexity, executionCost } from "./metrics";
+import { convexity } from "./metrics";
 
 /**
  * Snapshot-native engine (ADR 0001, 0007). Each side is a pair of typed
@@ -64,7 +64,6 @@ class BookEngine implements Engine {
   private lastSlowRx = 0;
   private cached: BookSnapshot | undefined;
   private cachedMetrics: Metrics | undefined;
-  private cachedNotional = Number.NaN;
   private readonly attribution: Attribution = createAttribution();
   private readonly stats: LevelStats = createLevelStats();
   private migrations: Migration[] = [];
@@ -176,15 +175,14 @@ class BookEngine implements Engine {
     return out;
   };
 
-  readonly metrics = (notional: number): Metrics => {
+  readonly metrics = (): Metrics => {
     const cached = this.cachedMetrics;
-    if (cached !== undefined && this.cachedNotional === notional) return cached;
+    if (cached !== undefined) return cached;
     const snapshot = this.snapshot();
     const bb = this.bestBid ?? snapshot.bids[0];
     const aa = this.bestAsk ?? snapshot.asks[0];
     const share = bb !== undefined && aa !== undefined && bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5;
     const unit = this.scale === undefined ? 1 : 10 ** -this.scale.decimals;
-    const mid = bb !== undefined && aa !== undefined ? ((bb.px + aa.px) / 2) * unit : Number.NaN;
     const fiveBid = sumTop(snapshot.bids, 5);
     const fiveAsk = sumTop(snapshot.asks, 5);
     const metrics: Metrics = {
@@ -195,11 +193,8 @@ class BookEngine implements Engine {
       pressure: this.stats.fieldSum("bid", this.now) - this.stats.fieldSum("ask", this.now),
       bid: this.sideMetrics("bid", snapshot.bids),
       ask: this.sideMetrics("ask", snapshot.asks),
-      costBuy: this.cost(snapshot.asks, notional, mid),
-      costSell: this.cost(snapshot.bids, notional, mid),
     };
     this.cachedMetrics = metrics;
-    this.cachedNotional = notional;
     return metrics;
   };
 
@@ -212,13 +207,6 @@ class BookEngine implements Engine {
   private sideMetrics(side: Side, levels: ReadonlyArray<Level>): SideMetrics {
     const w = this.stats.window(side, this.now);
     return { ...w, convexity: convexity(levels) };
-  }
-
-  private cost(levels: ReadonlyArray<Level>, notional: number, mid: number) {
-    if (this.scale === undefined) {
-      return { vwap: Number.NaN, slippageBps: Number.NaN, filledFraction: 0, levels: 0, exceedsVisibleDepth: true };
-    }
-    return executionCost(levels, notional, mid, this.scale);
   }
 
   /** Move late-attributed volume from cancelled to consumed (ADR 0005). */

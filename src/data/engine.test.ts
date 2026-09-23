@@ -42,7 +42,10 @@ function sorted(levels: ReadonlyArray<Level>, dir: 1 | -1): boolean {
 
 describe("engine replay over every recording", () => {
   const names = readdirSync("fixtures").filter((f: string) => f.endsWith(".jsonl.gz"));
-  it.each(names)("%s keeps its invariants on every event", (name: string) => {
+  // Each recording folds thousands of events and asserts every invariant on
+  // every one of them. It is a volume test, not a latency test: the default
+  // 5 s budget turns a loaded machine into a false failure.
+  it.each(names)("%s keeps its invariants on every event", { timeout: 30_000 }, (name: string) => {
     const fx = loadFixture(name);
     // The recordings never cross a precision change on the engine's side in
     // this ticket: replay only up to the first control line.

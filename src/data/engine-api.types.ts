@@ -38,15 +38,6 @@ export type LevelEvent = {
   readonly time: number;
 };
 
-/** One side's execution cost for a notional (Derived Metrics §8). */
-export type ExecutionCost = {
-  readonly vwap: number;
-  readonly slippageBps: number;
-  readonly filledFraction: number;
-  readonly levels: number;
-  readonly exceedsVisibleDepth: boolean;
-};
-
 /** Per-side figures the HUD shows (Derived Metrics §3, §6, §7, §10). */
 export type SideMetrics = {
   readonly eventChurn: number;
@@ -78,8 +69,6 @@ export type Metrics = {
   readonly pressure: number;
   readonly bid: SideMetrics;
   readonly ask: SideMetrics;
-  readonly costBuy: ExecutionCost;
-  readonly costSell: ExecutionCost;
 };
 
 /** A level that appears to have been repriced within one fast push (heuristic). */
@@ -120,8 +109,8 @@ export type Engine = {
   readonly field: (side: Side, px: Tick) => number;
   /** Live resiliency watch for one price, if any. */
   readonly watch: (side: Side, px: Tick) => LevelWatch | undefined;
-  /** Derived metrics at `notional` quote units; cached per version. */
-  readonly metrics: (notional: number) => Metrics;
+  /** Derived metrics; cached per version. */
+  readonly metrics: () => Metrics;
   /** Forget everything and adopt a new grid; used on coin and precision change. Enters `RESYNCING`. */
   readonly reset: (config: EngineConfig) => void;
 };

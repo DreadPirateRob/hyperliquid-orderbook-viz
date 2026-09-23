@@ -49,15 +49,13 @@ export type FrameInput = {
 export type MetricSource = {
   readonly field: (side: Side, px: Tick) => number;
   readonly watch: (side: Side, px: Tick) => LevelWatch | undefined;
-  readonly metrics: (notional: number) => Metrics;
+  readonly metrics: () => Metrics;
 };
 
 /** Sampler options. */
 export type SamplerOptions = {
   /** OS reduced-motion preference, read per frame: the anchor snaps instead of gliding. */
   readonly reducedMotion: () => boolean;
-  /** Execution-cost notional in quote units. */
-  readonly notional: () => number;
 };
 
 /** The state layer's sampler. */
@@ -168,7 +166,7 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
         bestAskSz: aa.sz,
         midTrail,
         migrations: live,
-        metrics: engine?.metrics(options.notional()),
+        metrics: engine?.metrics(),
         tape: tape.rows(),
         tapeOutlier: tape.outlierSize(t),
         lastTrade,

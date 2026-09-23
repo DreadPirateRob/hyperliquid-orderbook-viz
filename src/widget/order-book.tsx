@@ -61,7 +61,6 @@ export type WidgetState = {
 const BASE_STATE: RuntimeState = {
   view: "ladder",
   gridTick: undefined,
-  notional: 100_000,
   trailsOn: true,
   tapeOn: true,
   overlaysOn: true,
@@ -318,7 +317,6 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
       paused,
       cadence: settings.cadence,
       ruler: settings.ruler,
-      notional: settings.notional,
     });
   }, [trailsShown, tapeShown, overlaysShown, metricsOn, viewShown, gridTick, paused, settings]);
 

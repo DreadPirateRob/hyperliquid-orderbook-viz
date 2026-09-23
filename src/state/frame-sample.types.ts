@@ -88,7 +88,7 @@ export type FrameSample = {
   readonly tapeOutlier: number;
   /** Repricing pairs still fading. */
   readonly migrations: ReadonlyArray<Migration>;
-  /** Book-wide metrics at the current notional, or `undefined` when overlays are off. */
+  /** Book-wide metrics, or `undefined` when overlays are off. */
   readonly metrics: Metrics | undefined;
   /** Last print and its direction relative to the print before it. */
   readonly lastTrade: { readonly px: Tick; readonly dir: -1 | 0 | 1 } | undefined;

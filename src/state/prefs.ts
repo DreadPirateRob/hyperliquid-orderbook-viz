@@ -2,7 +2,7 @@ import { z } from "zod";
 
 /**
  * Preferences that are not worth sharing in a URL: cadence, ruler distance,
- * execution-cost notional, metrics visibility and favourites (ADR 0008).
+ * metrics visibility and favourites (ADR 0008).
  * A module-level store with `subscribe`/`get` so React can read it through
  * `useSyncExternalStore` without the widget owning storage.
  */
@@ -12,7 +12,6 @@ const KEY = "ob.prefs";
 const Prefs = z.object({
   cadence: z.enum(["60", "30", "update"]).default("60"),
   ruler: z.number().int().min(4).max(40).default(12),
-  notional: z.union([z.literal(10_000), z.literal(100_000), z.literal(1_000_000)]).default(100_000),
   metricsOn: z.boolean().default(false),
   favourites: z.array(z.string()).default([]),
 });

@@ -1,13 +1,12 @@
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Grouping from "../domain/grouping";
 import * as Tick from "../domain/tick";
 import { createEngine } from "./engine";
 import type { Level } from "./feed-events.types";
 import { parseFixture } from "./fixture";
-import { convexity, executionCost } from "./metrics";
+import { convexity } from "./metrics";
 import { parseWireMessage } from "./wire";
 
 function scaleOf(): Tick.PriceScale {
@@ -24,58 +23,6 @@ function tick(px: string): Tick.Tick {
 function lvl(px: string, sz: number): Level {
   return { px: tick(px), sz, n: 1 };
 }
-/** Quote price of a tick on the BTC scale. */
-function quote(t: number): number {
-  return t * 10 ** -btc.decimals;
-}
-
-describe("execution cost", () => {
-  it("walks the book from the touch and reports VWAP, slippage and fill fraction", () => {
-    // asks: 100 @ 1, 101 @ 2, 102 @ 4 (quote prices); buy 302 of notional
-    const asks = [lvl("100.0", 1), lvl("101.0", 2), lvl("102.0", 4)];
-    const cost = executionCost(asks, 302, 99.5, btc);
-    // 1 @ 100 + 2 @ 101 = 302 notional, 3 coins
-    expect(cost.filledFraction).toBeCloseTo(1, 9);
-    expect(cost.vwap).toBeCloseTo(302 / 3, 9);
-    expect(cost.levels).toBe(2);
-    expect(cost.exceedsVisibleDepth).toBe(false);
-    expect(cost.slippageBps).toBeCloseTo(((302 / 3 - 99.5) / 99.5) * 1e4, 6);
-  });
-
-  it("flags a notional the visible book cannot fill", () => {
-    const cost = executionCost([lvl("100.0", 1)], 1000, 100, btc);
-    expect(cost.exceedsVisibleDepth).toBe(true);
-    expect(cost.filledFraction).toBeCloseTo(0.1, 9);
-    expect(cost.levels).toBe(1);
-  });
-
-  it("always prices between the touch and the deepest level it consumed", () => {
-    fc.assert(
-      fc.property(
-        fc.array(fc.tuple(fc.integer({ min: 1000, max: 2000 }), fc.double({ min: 0.001, max: 5, noNaN: true })), {
-          minLength: 1,
-          maxLength: 12,
-        }),
-        fc.double({ min: 100, max: 1e6, noNaN: true }),
-        (raw, notional) => {
-          const levels = raw
-            .map(([px, sz]) => ({ px: tick(`${px}.0`), sz, n: 1 }))
-            .toSorted((a, b) => a.px - b.px)
-            .filter((l, i, all) => i === 0 || l.px !== all[i - 1]?.px);
-          const best = levels[0];
-          if (best === undefined) return;
-          const cost = executionCost(levels, notional, quote(best.px), btc);
-          if (cost.filledFraction === 0) return;
-          const deepest = levels[cost.levels - 1];
-          expect(cost.vwap).toBeGreaterThanOrEqual(quote(best.px) - 1e-9);
-          expect(cost.vwap).toBeLessThanOrEqual(quote(deepest?.px ?? best.px) + 1e-9);
-          expect(cost.slippageBps).toBeGreaterThanOrEqual(0);
-        },
-      ),
-    );
-  });
-});
-
 describe("convexity", () => {
   it("is higher for a front-loaded book than a flat one", () => {
     const front = [lvl("100.0", 10), lvl("101.0", 1), lvl("102.0", 1), lvl("103.0", 1)];
@@ -114,7 +61,7 @@ describe("engine metrics on a recording", () => {
       if (version === lastVersion) continue;
       lastVersion = version;
       metricsCalls++;
-      const m = engine.metrics(100_000);
+      const m = engine.metrics();
       expect(m.version).toBe(version);
       for (const side of [m.bid, m.ask]) {
         if (!Number.isNaN(side.cancelRatioCount)) {
@@ -137,36 +84,9 @@ describe("engine metrics on a recording", () => {
   it("computes once per version and serves the cache afterwards", () => {
     const e = createEngine({ gridTick: 10 });
     e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 1)], asks: [lvl("101.0", 1)], time: 0, rx: 1 });
-    const first = e.metrics(10_000);
-    expect(e.metrics(10_000)).toBe(first);
-    expect(e.metrics(100_000), "a different notional recomputes").not.toBe(first);
+    const first = e.metrics();
+    expect(e.metrics(), "same version serves the cache").toBe(first);
     e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("100.0", 2)], asks: [lvl("101.0", 1)], time: 0, rx: 2 });
-    expect(e.metrics(10_000)).not.toBe(first);
-  });
-});
-
-describe("engine execution cost", () => {
-  it("prices a notional once the engine knows the market's scale", () => {
-    const e = createEngine({ gridTick: 10, scale: btc });
-    e.apply({
-      _tag: "l2Book",
-      stream: "slow",
-      bids: [lvl("99.0", 10), lvl("98.0", 10)],
-      asks: [lvl("100.0", 1), lvl("101.0", 10)],
-      time: 0,
-      rx: 1,
-    });
-    const m = e.metrics(1000);
-    expect(m.costBuy.exceedsVisibleDepth).toBe(false);
-    expect(m.costBuy.vwap).toBeGreaterThan(100);
-    expect(m.costBuy.vwap).toBeLessThan(101);
-    expect(m.costBuy.slippageBps).toBeGreaterThan(0);
-    expect(m.costSell.filledFraction).toBeCloseTo(1, 9);
-  });
-
-  it("reports an unusable cost when the engine has no scale yet", () => {
-    const e = createEngine({ gridTick: 10 });
-    e.apply({ _tag: "l2Book", stream: "slow", bids: [lvl("99.0", 10)], asks: [lvl("100.0", 10)], time: 0, rx: 1 });
-    expect(e.metrics(1000).costBuy.exceedsVisibleDepth).toBe(true);
+    expect(e.metrics(), "a new version recomputes").not.toBe(first);
   });
 });

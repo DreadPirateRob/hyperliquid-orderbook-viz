@@ -72,7 +72,7 @@ Prints, newest first, aligned with the row they hit: age, direction mark, price,
 
 ![Metrics HUD](docs/images/hud.png)
 
-`m` opens the HUD: pressure, cancel ratios by count and by volume, churn, median refill and refill-at-5 s, convexity, execution cost at the configured notional, and render telemetry. It is written straight to the DOM by ref at 2 Hz — React does not re-render for it, and an end-to-end test asserts exactly that.
+`m` opens the HUD: pressure, cancel ratios by count and by volume, churn, median refill and refill-at-5 s, convexity, and render telemetry. It is written straight to the DOM by ref at 2 Hz — React does not re-render for it, and an end-to-end test asserts exactly that.
 
 ### Pair picker
 
@@ -84,7 +84,7 @@ Prints, newest first, aligned with the row they hit: age, direction mark, price,
 
 ![Settings](docs/images/settings.png)
 
-Render cadence (60 fps, 30 fps, or draw only on update), how far the depth ruler reaches, and the notional execution cost is priced at. These are preferences: they persist in `localStorage` and stay out of the URL, while everything shareable (coin, grouping, columns, view) lives in the URL (ADR 0008).
+Render cadence (60 fps, 30 fps, or draw only on update) and how far the depth ruler reaches. These are preferences: they persist in `localStorage` and stay out of the URL, while everything shareable (coin, grouping, columns, view) lives in the URL (ADR 0008).
 
 ### Grouping
 

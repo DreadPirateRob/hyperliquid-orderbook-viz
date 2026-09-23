@@ -87,6 +87,9 @@ test("the HUD updates by ref: no React commits at steady state", async ({ page }
 test("overlays and metrics toggle from the keyboard and survive in the URL", async ({ page }) => {
   await page.goto("/?fixture=btc-perp-active&speed=4");
   const root = page.locator(".orderbook");
+  // `data-connection` is written by the runtime, so it only appears once the
+  // mount effects — including the shortcut listener — have run.
+  await expect(root).toHaveAttribute("data-connection", /LIVE|SUBSCRIBING|CONNECTING/, { timeout: 20_000 });
   await expect(root).toHaveAttribute("data-overlays", "1");
   await page.keyboard.press("o");
   await expect(root).toHaveAttribute("data-overlays", "0");
@@ -130,6 +133,7 @@ test("the pair picker opens with /, filters, and switching coin resets and re-su
   await page.goto("/?coin=BTC");
   const root = page.locator(".orderbook");
   await expect(root).toHaveAttribute("data-coin", "BTC");
+  await expect(root).toHaveAttribute("data-connection", /LIVE|SUBSCRIBING|CONNECTING/, { timeout: 20_000 });
   await page.keyboard.press("/");
   const picker = page.locator(".orderbook-pairpop");
   await expect(picker).toBeVisible();
@@ -149,8 +153,12 @@ test("the pair picker opens with /, filters, and switching coin resets and re-su
 
 test("escape closes the picker and returns focus to its trigger", async ({ page }) => {
   await page.goto("/?fixture=btc-perp-active&speed=4");
-  // The fixture demo mounts after the recording loads, so wait for the widget before typing at it.
-  await expect(page.locator(".orderbook")).toBeVisible();
+  // The fixture demo mounts after the recording loads, and the shortcut listener
+  // is attached in an effect: wait for a runtime-written attribute, which only
+  // appears once those effects have run, before typing at the widget.
+  await expect(page.locator(".orderbook")).toHaveAttribute("data-connection", /LIVE|SUBSCRIBING|CONNECTING/, {
+    timeout: 20_000,
+  });
   await page.keyboard.press("/");
   await expect(page.locator(".orderbook-pairpop")).toBeVisible();
   await page.keyboard.press("Escape");
@@ -176,12 +184,10 @@ test("settings persist across a reload and drive the render cadence", async ({ p
 
   await gear.getByRole("combobox").first().selectOption("30");
   await gear.getByRole("slider").fill("20");
-  await gear.getByRole("combobox").last().selectOption("1000000");
   await page.keyboard.press("Escape");
   await expect(gear).toHaveCount(0);
 
   await page.keyboard.press("m");
-  await expect(page.locator(".orderbook-hud pre")).toContainText("COST $1M", { timeout: 5000 });
   await expect(page.locator(".orderbook-hud pre")).toContainText(/RENDER\s+3\d\.\d fps/, { timeout: 5000 });
 
   await page.reload();
