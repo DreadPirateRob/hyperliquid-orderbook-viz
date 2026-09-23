@@ -282,3 +282,30 @@ test("a UI change repaints a settled book under the on-update cadence", async ({
   await expect(root).toHaveAttribute("data-view", "spine");
   await expect.poll(paints, { timeout: 3000 }).toBeGreaterThan(before);
 });
+
+test("one toggle writes the URL once, even under StrictMode", async ({ page }) => {
+  await page.goto("/?fixture=btc-perp-active&speed=4");
+  const root = page.locator(".orderbook");
+  await expect(root).toHaveAttribute("data-connection", /LIVE|SUBSCRIBING|CONNECTING/, { timeout: 20_000 });
+
+  // The demo reports state with `replaceState`; count the calls, because a
+  // side effect inside a state updater is replayed by React.
+  await page.evaluate(() => {
+    const counts = { calls: 0 };
+    Reflect.set(globalThis, "__obUrlWrites", counts);
+    const original = history.replaceState.bind(history);
+    history.replaceState = (...args: Parameters<typeof original>) => {
+      counts.calls++;
+      original(...args);
+    };
+  });
+
+  await page.keyboard.press("o");
+  await expect(root).toHaveAttribute("data-overlays", "0");
+  const writes = await page.evaluate(() => {
+    const counts = Reflect.get(globalThis, "__obUrlWrites");
+    const n = counts === null || typeof counts !== "object" ? -1 : Reflect.get(counts, "calls");
+    return typeof n === "number" ? n : -1;
+  });
+  expect(writes, "one interaction, one outward notification").toBe(1);
+});

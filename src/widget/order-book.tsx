@@ -127,37 +127,34 @@ export function OrderBook(props: OrderBookProps): JSX.Element {
     },
     [onStateChange, coin, trailsOn, tapeOn, overlaysOn, view, gridTick],
   );
+  // State updaters stay pure: React may replay them, and StrictMode invokes
+  // them twice on purpose. The outward notification (ADR 0008's `onStateChange`
+  // seam) and preference writes happen once, here at the interaction boundary.
   const toggleTrails = useCallback(() => {
-    setTrailsOn((on) => {
-      report({ trailsOn: !on });
-      return !on;
-    });
-  }, [report]);
+    const next = !trailsOn;
+    setTrailsOn(next);
+    report({ trailsOn: next });
+  }, [report, trailsOn]);
   const toggleTape = useCallback(() => {
-    setTapeOn((on) => {
-      report({ tapeOn: !on });
-      return !on;
-    });
-  }, [report]);
+    const next = !tapeOn;
+    setTapeOn(next);
+    report({ tapeOn: next });
+  }, [report, tapeOn]);
   const toggleOverlays = useCallback(() => {
-    setOverlaysOn((on) => {
-      report({ overlaysOn: !on });
-      return !on;
-    });
-  }, [report]);
+    const next = !overlaysOn;
+    setOverlaysOn(next);
+    report({ overlaysOn: next });
+  }, [report, overlaysOn]);
   const toggleView = useCallback(() => {
-    setView((v) => {
-      const next = v === "ladder" ? "spine" : "ladder";
-      report({ view: next });
-      return next;
-    });
-  }, [report]);
+    const next = view === "ladder" ? "spine" : "ladder";
+    setView(next);
+    report({ view: next });
+  }, [report, view]);
   const toggleMetrics = useCallback(() => {
-    setMetricsOn((on) => {
-      prefs?.set({ metricsOn: !on });
-      return !on;
-    });
-  }, [prefs]);
+    const next = !metricsOn;
+    setMetricsOn(next);
+    prefs?.set({ metricsOn: next });
+  }, [prefs, metricsOn]);
   const togglePause = useCallback(() => setPaused((p) => !p), []);
   const toggleGear = useCallback(() => setGearOpen((open) => !open), []);
   const closeGear = useCallback(() => {
