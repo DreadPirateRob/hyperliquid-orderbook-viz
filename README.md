@@ -137,7 +137,7 @@ flowchart TD
 | [0008](docs/adr/0008-react-chrome-patterns.md)         | React owns chrome only; frames are written by ref                                    |
 | [0009](docs/adr/0009-visual-layer-ports-v4.md)         | The visual layer is a port of the v4 prototype; every deviation is recorded          |
 
-Feed facts behind these — tick derivation, aggregation grids, observed cadences — are in [docs/research/hyperliquid-feed.md](docs/research/hyperliquid-feed.md).
+Feed facts behind these — tick derivation, aggregation grids, observed cadences — are summarised in the quirks section below; the raw research notes are kept out of this repo.
 
 ## Quirks we hit
 

@@ -4,3 +4,5 @@ prototype/
 *.tsbuildinfo
 test-results/
 playwright-report/
+.scratch/
+docs/research/

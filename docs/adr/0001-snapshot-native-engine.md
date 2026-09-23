@@ -4,7 +4,7 @@ Status: accepted
 
 ## Context
 
-Hyperliquid's `l2Book` channel pushes **full snapshots**: ~20 levels/side every ~5.4 s, plus a 5-level `fast` variant every ~0.54 s. There are no sequence numbers, no deltas, no gap signals ([Hyperliquid Feed Facts](../../.scratch/orderbook-widget/issues/01-hyperliquid-feed-facts.md)).
+Hyperliquid's `l2Book` channel pushes **full snapshots**: ~20 levels/side every ~5.4 s, plus a 5-level `fast` variant every ~0.54 s. There are no sequence numbers, no deltas, no gap signals (observed over recorded sessions, not documented by the venue).
 
 ## Decision
 

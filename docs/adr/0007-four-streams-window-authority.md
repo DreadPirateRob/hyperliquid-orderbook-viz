@@ -4,7 +4,7 @@ Status: accepted
 
 ## Context
 
-One socket carries four subscriptions: slow `l2Book` (20 levels, ~5.4 s), fast `l2Book` (5 levels, ~0.54 s, `data.fast === true`), `bbo` (~70 ms), `trades`. Each covers a nested price window at a different cadence ([Feed Cadence Strategy](../../.scratch/orderbook-widget/issues/16-feed-cadence-strategy.md)).
+One socket carries four subscriptions: slow `l2Book` (20 levels, ~5.4 s), fast `l2Book` (5 levels, ~0.54 s, `data.fast === true`), `bbo` (~70 ms), `trades`. Each covers a nested price window at a different cadence (cadences measured from recordings).
 
 ## Decision
 
