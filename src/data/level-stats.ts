@@ -17,6 +17,9 @@ const RES_CAP_MS = 30_000;
 /** Cancel ratios look back this far; churn this far (v4/Derived Metrics). */
 const RATIO_WINDOW_MS = 60_000;
 const CHURN_WINDOW_MS = 5000;
+/** Idle prices are evicted after this long with a fully decayed field. */
+const IDLE_EVICT_MS = 60_000;
+const FIELD_EPSILON = 1e-9;
 /** Median refill time is taken over this window. */
 const REFILL_WINDOW_MS = 300_000;
 
@@ -32,12 +35,23 @@ export type Watch = {
   at5s: number | undefined;
 };
 
-/** One decrease in the per-side window. */
-type SideEvent = {
-  readonly t: number;
-  readonly consumed: number;
-  readonly cancelled: number;
-  hit: boolean;
+/**
+ * The rolling window is kept as fixed 250 ms buckets, not one entry per
+ * decrease: at a live 30 events/s either shape is trivial, but the window is
+ * 60 s long, so a per-event list grows with the event rate and every read
+ * walks it. Buckets make a read constant-cost and a correction O(1).
+ */
+const BUCKET_MS = 250;
+const BUCKETS = Math.ceil(RATIO_WINDOW_MS / BUCKET_MS) + 1;
+
+/** One 250 ms slice of a side's decreases. */
+type Bucket = {
+  /** Slice index (`floor(t / BUCKET_MS)`); identifies which window this holds. */
+  id: number;
+  count: number;
+  hits: number;
+  consumed: number;
+  cancelled: number;
 };
 
 /** Per-price metric state. */
@@ -48,6 +62,8 @@ export type LevelStat = {
   field: number;
   fieldAt: number;
   size: number;
+  /** Last time this price was touched; idle entries are evicted so the store tracks the live book. */
+  lastAt: number;
   watch: Watch | undefined;
 };
 
@@ -73,8 +89,16 @@ export type LevelStats = {
     countable: boolean,
     split: { consumed: number; cancelled: number },
   ) => void;
-  /** Move an already-recorded decrease from cancelled to consumed (deferred attribution). */
-  readonly reattribute: (side: Side, px: Tick, consumed: number, cancelled: number) => void;
+  /**
+   * Correct an already-recorded decrease whose split moved (deferred
+   * attribution): `at` locates its bucket, so no scan is needed.
+   */
+  readonly reattribute: (
+    side: Side,
+    at: number,
+    previous: { consumed: number; cancelled: number },
+    next: { consumed: number; cancelled: number },
+  ) => void;
   /** Advance resiliency watches. */
   readonly tick: (t: number) => void;
   /** Field value at `t` for one price, decayed. */
@@ -96,19 +120,37 @@ export type LevelStats = {
  */
 export function createLevelStats(): LevelStats {
   const stats = new Map<string, LevelStat>();
-  const events: Record<Side, SideEvent[]> = { bid: [], ask: [] };
+  // One ring of fixed slices per side; `bucketAt` reuses a slot once its id is stale.
+  const windows: Record<Side, Bucket[]> = { bid: makeRing(), ask: makeRing() };
   const refills: Record<Side, Array<{ readonly t: number; readonly ms: number; readonly at5s: number | undefined }>> = {
     bid: [],
     ask: [],
   };
+  /** Index of the first live refill per side; trimming moves the cursor, never the array. */
+  const refillFrom: Record<Side, number> = { bid: 0, ask: 0 };
   const stat = (side: Side, px: Tick, t: number): LevelStat => {
     const k = key(side, px);
     let s = stats.get(k);
     if (s === undefined) {
-      s = { side, px, field: 0, fieldAt: t, size: 0, watch: undefined };
+      s = { side, px, field: 0, fieldAt: t, size: 0, lastAt: t, watch: undefined };
       stats.set(k, s);
     }
+    s.lastAt = t;
     return s;
+  };
+  /** The slice `t` belongs to, recycled in place when the ring wraps. */
+  const bucketAt = (side: Side, t: number): Bucket => {
+    const id = Math.floor(t / BUCKET_MS);
+    const slot = windows[side][((id % BUCKETS) + BUCKETS) % BUCKETS];
+    if (slot === undefined) throw new Error("window ring is not allocated");
+    if (slot.id !== id) {
+      slot.id = id;
+      slot.count = 0;
+      slot.hits = 0;
+      slot.consumed = 0;
+      slot.cancelled = 0;
+    }
+    return slot;
   };
 
   return {
@@ -118,26 +160,38 @@ export function createLevelStats(): LevelStats {
       s.fieldAt = t;
       s.size = after;
       if (after >= before) return;
-      if (countable)
-        events[side].push({ t, consumed: split.consumed, cancelled: split.cancelled, hit: split.consumed > 0 });
+      if (countable) {
+        const b = bucketAt(side, t);
+        b.count++;
+        b.consumed += split.consumed;
+        b.cancelled += split.cancelled;
+        if (split.consumed > 0) b.hits++;
+      }
       if (s.watch === undefined && before > 0 && (before - after) / before >= RES_TRIGGER) {
         s.watch = { startedAt: t, before, done: undefined, at5s: undefined };
       }
     },
-    reattribute: (side, px, consumed, cancelled) => {
-      const list = events[side];
-      for (let i = list.length - 1; i >= 0; i--) {
-        const e = list[i];
-        if (e === undefined || e.consumed + e.cancelled !== consumed + cancelled) continue;
-        list[i] = { t: e.t, consumed, cancelled, hit: consumed > 0 };
-        return;
-      }
-      void px;
+    reattribute: (side, at, previous, next) => {
+      const id = Math.floor(at / BUCKET_MS);
+      const slot = windows[side][((id % BUCKETS) + BUCKETS) % BUCKETS];
+      // The decrease's slice may already have rolled out of the window; then
+      // there is nothing to correct, which is the same answer as before.
+      if (slot === undefined || slot.id !== id) return;
+      slot.consumed += next.consumed - previous.consumed;
+      slot.cancelled += next.cancelled - previous.cancelled;
+      if (previous.consumed <= 0 && next.consumed > 0) slot.hits++;
     },
     tick: (t) => {
-      for (const s of stats.values()) {
+      for (const [k, s] of stats) {
         const w = s.watch;
-        if (w === undefined) continue;
+        if (w === undefined) {
+          // Evict idle prices: the field has decayed to nothing and the book
+          // has moved on, so keeping the entry only makes every sweep longer.
+          if (t - s.lastAt > IDLE_EVICT_MS && Math.abs(decayField(s.field, t - s.fieldAt, TAU_F)) < FIELD_EPSILON) {
+            stats.delete(k);
+          }
+          continue;
+        }
         if (w.at5s === undefined && t - w.startedAt >= 5000) w.at5s = s.size / w.before;
         if (w.done === undefined) {
           if (s.size >= RES_TARGET * w.before) w.done = t - w.startedAt;
@@ -159,24 +213,35 @@ export function createLevelStats(): LevelStats {
       return sum;
     },
     window: (side, t) => {
-      const list = events[side];
-      while (list.length > 0 && (list[0]?.t ?? t) < t - RATIO_WINDOW_MS) list.shift();
-      const recent = refills[side];
-      while (recent.length > 0 && (recent[0]?.t ?? t) < t - REFILL_WINDOW_MS) recent.shift();
+      const oldest = Math.floor((t - RATIO_WINDOW_MS) / BUCKET_MS);
+      const churnFrom = Math.floor((t - CHURN_WINDOW_MS) / BUCKET_MS);
       let consumed = 0;
       let cancelled = 0;
       let hits = 0;
+      let count = 0;
       let churnEvents = 0;
       let churnVolume = 0;
-      for (const e of list) {
-        consumed += e.consumed;
-        cancelled += e.cancelled;
-        if (e.hit) hits++;
-        if (e.t >= t - CHURN_WINDOW_MS) {
-          churnEvents++;
-          churnVolume += e.consumed + e.cancelled;
+      for (const b of windows[side]) {
+        if (b.id < oldest) continue;
+        consumed += b.consumed;
+        cancelled += b.cancelled;
+        hits += b.hits;
+        count += b.count;
+        if (b.id >= churnFrom) {
+          churnEvents += b.count;
+          churnVolume += b.consumed + b.cancelled;
         }
       }
+      // Refills are rare (one per completed resiliency watch): trim by cursor.
+      const all = refills[side];
+      let from = refillFrom[side];
+      while (from < all.length && (all[from]?.t ?? t) < t - REFILL_WINDOW_MS) from++;
+      if (from > all.length / 2) {
+        all.splice(0, from);
+        from = 0;
+      }
+      refillFrom[side] = from;
+      const recent = all.slice(from);
       const times = recent.map((r) => r.ms).toSorted((a, b) => a - b);
       const at5s = recent
         .map((r) => r.at5s)
@@ -185,7 +250,7 @@ export function createLevelStats(): LevelStats {
       return {
         eventChurn: churnEvents / (CHURN_WINDOW_MS / 1000),
         volumeChurn: churnVolume / (CHURN_WINDOW_MS / 1000),
-        cancelRatioCount: list.length > 0 ? 1 - hits / list.length : Number.NaN,
+        cancelRatioCount: count > 0 ? 1 - hits / count : Number.NaN,
         cancelRatioVolume: consumed + cancelled > 0 ? cancelled / (consumed + cancelled) : Number.NaN,
         medianRefillMs: times[times.length >> 1],
         refillAt5s: at5s[at5s.length >> 1],
@@ -194,10 +259,17 @@ export function createLevelStats(): LevelStats {
     watch: (side, px) => stats.get(key(side, px))?.watch,
     clear: () => {
       stats.clear();
-      events.bid = [];
-      events.ask = [];
+      windows.bid = makeRing();
+      windows.ask = makeRing();
       refills.bid = [];
       refills.ask = [];
+      refillFrom.bid = 0;
+      refillFrom.ask = 0;
     },
   };
+}
+
+/** A fresh ring of empty slices; `id: -1` marks a slot that has never been used. */
+function makeRing(): Bucket[] {
+  return Array.from({ length: BUCKETS }, () => ({ id: -1, count: 0, hits: 0, consumed: 0, cancelled: 0 }));
 }

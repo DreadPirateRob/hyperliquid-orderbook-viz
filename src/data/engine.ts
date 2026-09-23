@@ -224,7 +224,10 @@ class BookEngine implements Engine {
   /** Move late-attributed volume from cancelled to consumed (ADR 0005). */
   private settleAttribution(t: number): void {
     for (const moved of this.attribution.reattribute(t)) {
-      this.stats.reattribute(moved.side, moved.px, moved.consumed, moved.cancelled);
+      this.stats.reattribute(moved.side, moved.at, moved.previous, {
+        consumed: moved.consumed,
+        cancelled: moved.cancelled,
+      });
     }
   }
 

@@ -39,6 +39,10 @@ export type PendingDecrease = {
 export type Reattributed = {
   readonly side: Side;
   readonly px: Tick;
+  /** Frame time the decrease was observed; identifies the window bucket it landed in. */
+  readonly at: number;
+  /** Split before this move, so an aggregate can be corrected without a scan. */
+  readonly previous: Split;
   readonly consumed: number;
   readonly cancelled: number;
 };
@@ -59,12 +63,20 @@ export type Attribution = {
   readonly clear: () => void;
 };
 
-type RecentTrade = {
-  readonly px: Tick;
-  readonly sz: number;
-  /** Side of the book the aggressor hit: a buy takes the ask. */
-  readonly side: Side;
-  readonly rx: number;
+/**
+ * Prints at one price, in arrival order, with cumulative volume per side.
+ * A join asks "how much traded in `(from, to]`", which two binary searches
+ * and a subtraction answer — the flat scan it replaces is what made the
+ * engine fall over in the burst benchmark, where the 15 s window can hold
+ * six figures of prints at one price.
+ */
+type PriceBucket = {
+  /** Arrival times, ascending. */
+  readonly rx: number[];
+  /** Cumulative size hitting the bid, by index. */
+  readonly bid: number[];
+  /** Cumulative size hitting the ask, by index. */
+  readonly ask: number[];
 };
 
 /**
@@ -73,18 +85,45 @@ type RecentTrade = {
  * @returns An empty attribution.
  */
 export function createAttribution(): Attribution {
-  let recent: RecentTrade[] = [];
+  // Prints are indexed by price and kept in arrival order within each bucket.
+  // A join only ever asks about one price, and a burst benchmark showed the
+  // flat scan is the engine's binding cost once the window holds thousands of
+  // prints: at 100k events/s the 15 s window is six figures deep.
+  let byPrice = new Map<Tick, PriceBucket>();
   let pending: PendingDecrease[] = [];
+  /**
+   * Open decreases by price, so a print re-joins only its own price. Each
+   * bucket is append-ordered in time and consumed from `from`, so expiry is a
+   * cursor bump rather than a rebuild of the bucket.
+   */
+  let pendingByPrice = new Map<Tick, { items: PendingDecrease[]; from: number }>();
+  /** Prices that saw a print since the last join. */
+  const dirty = new Set<Tick>();
 
   const volumeAt = (side: Side, px: Tick, from: number, to: number): number => {
-    let v = 0;
-    for (const t of recent) if (t.px === px && t.side === side && t.rx > from && t.rx <= to) v += t.sz;
-    return v;
+    const bucket = byPrice.get(px);
+    if (bucket === undefined) return 0;
+    const lo = upperBound(bucket.rx, from);
+    const hi = upperBound(bucket.rx, to) - 1;
+    if (hi < lo) return 0;
+    const cum = bucket[side];
+    return (cum[hi] ?? 0) - (lo > 0 ? (cum[lo - 1] ?? 0) : 0);
   };
 
   return {
     addTrade: (trade, rx) => {
-      recent.push({ px: trade.px, sz: trade.sz, side: trade.side === "B" ? "ask" : "bid", rx });
+      // A buy takes the ask.
+      const side: Side = trade.side === "B" ? "ask" : "bid";
+      let bucket = byPrice.get(trade.px);
+      if (bucket === undefined) {
+        bucket = { rx: [], bid: [], ask: [] };
+        byPrice.set(trade.px, bucket);
+      }
+      const last = bucket.rx.length - 1;
+      bucket.rx.push(rx);
+      bucket.bid.push((bucket.bid[last] ?? 0) + (side === "bid" ? trade.sz : 0));
+      bucket.ask.push((bucket.ask[last] ?? 0) + (side === "ask" ? trade.sz : 0));
+      dirty.add(trade.px);
     },
     split: (side, px, lost, from, to) => {
       const consumed = Math.min(lost, volumeAt(side, px, from, to));
@@ -102,29 +141,94 @@ export function createAttribution(): Attribution {
         open: true,
       };
       pending.push(record);
+      const bucket = pendingByPrice.get(px);
+      if (bucket === undefined) pendingByPrice.set(px, { items: [record], from: 0 });
+      else bucket.items.push(record);
       return record;
     },
     reattribute: (t) => {
       const moved: Reattributed[] = [];
-      for (const p of pending) {
-        if (!p.open) continue;
-        const consumed = Math.min(p.lost, volumeAt(p.side, p.px, p.from, p.at + GRACE_MS));
-        if (consumed > p.consumed) {
-          p.consumed = consumed;
-          p.cancelled = p.lost - consumed;
-          moved.push({ side: p.side, px: p.px, consumed: p.consumed, cancelled: p.cancelled });
+      // Only a price that has just printed can move a decrease, so the join
+      // visits those prices instead of every open decrease. Expiry is a
+      // separate front-of-queue walk: decreases open in arrival order.
+      for (const px of dirty) {
+        const bucket = pendingByPrice.get(px);
+        if (bucket === undefined) continue;
+        for (let i = bucket.from; i < bucket.items.length; i++) {
+          const p = bucket.items[i];
+          if (p === undefined || !p.open) continue;
+          const consumed = Math.min(p.lost, volumeAt(p.side, p.px, p.from, p.at + GRACE_MS));
+          if (consumed > p.consumed) {
+            const previous = { consumed: p.consumed, cancelled: p.cancelled };
+            p.consumed = consumed;
+            p.cancelled = p.lost - consumed;
+            moved.push({ side: p.side, px: p.px, at: p.at, previous, consumed, cancelled: p.cancelled });
+          }
         }
-        if (t - p.at > GRACE_MS) p.open = false;
       }
-      pending = pending.filter((p) => p.open);
+      dirty.clear();
+      let expired = 0;
+      while (expired < pending.length && t - (pending[expired]?.at ?? t) > GRACE_MS) {
+        const p = pending[expired];
+        if (p !== undefined) {
+          p.open = false;
+          // Per price, decreases expire in the order they opened: bump the
+          // cursor instead of rebuilding the bucket.
+          const bucket = pendingByPrice.get(p.px);
+          if (bucket !== undefined) {
+            while (bucket.from < bucket.items.length && bucket.items[bucket.from]?.open === false) bucket.from++;
+            if (bucket.from >= bucket.items.length) pendingByPrice.delete(p.px);
+          }
+        }
+        expired++;
+      }
+      if (expired > 0) pending.splice(0, expired);
       return moved;
     },
     prune: (t) => {
-      recent = recent.filter((tr) => tr.rx >= t - TRADE_TTL_MS);
+      const cutoff = t - TRADE_TTL_MS;
+      for (const [px, bucket] of byPrice) {
+        // Arrival order means expiry is a prefix: find it by search, not by walking.
+        const drop = lowerBound(bucket.rx, cutoff);
+        if (drop === 0) continue;
+        if (drop >= bucket.rx.length) {
+          byPrice.delete(px);
+          continue;
+        }
+        bucket.rx.splice(0, drop);
+        bucket.bid.splice(0, drop);
+        bucket.ask.splice(0, drop);
+      }
     },
     clear: () => {
-      recent = [];
+      byPrice = new Map();
       pending = [];
+      pendingByPrice = new Map();
+      dirty.clear();
     },
   };
+}
+
+/** First index whose value is `> value`; the array is ascending. */
+function upperBound(values: ReadonlyArray<number>, value: number): number {
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((values[mid] ?? 0) > value) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+/** First index whose value is `>= value`; the array is ascending. */
+function lowerBound(values: ReadonlyArray<number>, value: number): number {
+  let lo = 0;
+  let hi = values.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((values[mid] ?? 0) >= value) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
 }

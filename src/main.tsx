@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   // re-render at steady state, so the demo exposes React's commit count.
   const commits = { count: 0 };
   Reflect.set(globalThis, "__obCommits", commits);
-  createRoot(root).render(
+  const tree = (
     <StrictMode>
       <Profiler id="orderbook" onRender={onCommit}>
         <OrderBook
@@ -63,8 +63,17 @@ async function main(): Promise<void> {
           {...(feed === undefined ? {} : { feed })}
         />
       </Profiler>
-    </StrictMode>,
+    </StrictMode>
   );
+  let reactRoot = createRoot(root);
+  reactRoot.render(tree);
+  // Demo-only: the leak proof mounts and unmounts the widget twenty times.
+  Reflect.set(globalThis, "__obRemount", () => {
+    reactRoot.unmount();
+    reactRoot = createRoot(root);
+    reactRoot.render(tree);
+  });
+  Reflect.set(globalThis, "__obUnmount", () => reactRoot.unmount());
 }
 
 void main();
