@@ -66,6 +66,7 @@ describe("yOf", () => {
     pulses: [],
     first: 0,
     trail: [],
+    band: [],
   }));
   it("centres a grid price on its row and interpolates a finer BBO between rows", () => {
     expect(yOf(rows, 1010)).toBe(33);
@@ -93,6 +94,7 @@ describe("tagY", () => {
     pulses: [],
     first: 0,
     trail: [],
+    band: [],
   }));
   const frame = { rows, ribY: 33 } as unknown as Parameters<typeof tagY>[0];
 
@@ -124,6 +126,7 @@ describe("rowAtY", () => {
     pulses: [],
     first: 0,
     trail: [],
+    band: [],
   }));
 
   it("returns the row whose band contains the pointer, edges included at the top", () => {

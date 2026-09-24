@@ -64,3 +64,22 @@ Sampling stays at `TRAIL_DT`, so a level retains 240 samples instead of 48 and a
 That forced a second constant after all. `trailStrip` floored a tile at 2 px, which was under the pitch at 30 s and is now above it at every width but 1500: at 900 px each column would be covered by ~2.1 tiles, and since tiles are drawn with alpha the strip would composite into a band denser than any sample in it — history made up out of overlap. The floor is therefore 1 px, under the pitch everywhere, so tiles meet without overdrawing. The floor exists only to keep a sub-pixel tile visible, so lowering it costs nothing.
 
 The window stays under `DEAD_MS` (60 s) only by coincidence of equality, and nothing depends on the relation: entries hold live animation state per side, while trails are stored per price and pruned solely by `TRAIL_MS`. An evicted entry stops contributing new samples, which for a level at zero were `rel: 0` and drew nothing.
+
+## Amendment (History survives a grouping change)
+
+Changing the grouping used to be as destructive as changing the market: `reset("grid")` cleared the level history, so the trail column went blank and refilled from nothing. It never needed to. Grouping is a display choice, and the tape and the touch trail already outlived it.
+
+What makes carrying the rest safe is that **an instant belongs to exactly one grid**. `sampleTrails` writes every price's sample for a frame under a single timestamp, so samples taken before a change and samples taken after it never share an instant and can never be double-counted. After a change the strip reads as old grouping to the left, new grouping to the right — the resolution change is itself visible, which is honest.
+
+The two directions are not symmetric, and the asymmetry is in the data, not the code:
+
+- **Coarser by a whole multiple is derivable and exact.** Summing the finer trails per timestamp is precisely the trail the coarse grouping would have recorded, so they are merged and the distinction disappears. Sizes are exact. Shading is not: the ruler's largest level under the coarse grouping was never observed, so `rel` keeps the denominator in force when it was sampled — the freeze rule above — and saturates at 1 where a summed bucket outgrows the largest single level of its own time.
+- **Finer is not derivable at all.** Hyperliquid aggregates server-side: at `nSigFigs: 5` the sub-buckets never reached this client, so there is nothing to un-merge and no amount of work will produce it. The same holds for a step that is not a whole multiple, `$2 → $5`.
+
+Undrawable history is not discarded, because it is still true — it just says something weaker. Those samples are kept as **bands**, keyed by the bucket price they were recorded at, covering `[px, px + g)` for a bid bucket and `(px - g, px]` for an ask (bids round down, asks round up, as both venues aggregate). The renderer draws a band at full row height with no inset, so the rows it covers join into one unbroken block spanning the prices the bucket held, while present-grid tiles keep their inset and are drawn over it. A band says "this much stood somewhere in here"; splitting it across rows would say where, which nothing recorded.
+
+A band is drawn once, as one block spanning the rows it covers, and the store is what makes that possible: rows under one bucket are handed the _same_ sample array, so the renderer groups a run by identity. Drawing it per covered row instead is both a worse picture — ten seams where there is one block — and measurably slower. Measured on live BTC at 1500x900, five seconds of `requestAnimationFrame` pacing right after `$10 → $1`: per-row drawing landed **248 frames of 300 with a p95 of 33.4 ms**, i.e. dropped frames, against 300 of 300 at p95 16.8 ms in steady state. Drawing each band once restores 300 of 300 at 16.8 ms, indistinguishable from no bands at all. The first attempt kept the two sides in one array per bucket, which defeated the sharing — a row inside a bucket is covered by its bid samples but not its ask samples, so every row rebuilt a merged array — hence bid and ask are stored apart and coverage is pure arithmetic.
+
+Rejected: painting the coarse sample on the row that happens to match its bucket price. It is the cheapest option and it lies — it implies one price held depth that belonged to a whole band.
+
+Bands age out on `TRAIL_MS` like everything else, so the column returns to a single grid within a window of the change, and `clear()` still drops them with everything else when the market changes.

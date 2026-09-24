@@ -95,6 +95,7 @@ function frame(lastPx: number): FrameSample {
     pulses: [],
     first: 0,
     trail: [],
+    band: [],
   }));
   return {
     t: 1000,

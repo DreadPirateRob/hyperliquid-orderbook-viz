@@ -35,6 +35,8 @@ export type SampleGeometry = {
 /** What changed since the last frame, drained from the engine. */
 export type FrameInput = {
   readonly snapshot: BookSnapshot;
+  /** Row step in force for this batch, stamped on every trail sample taken from it. */
+  readonly gridTick: number;
   readonly events: ReadonlyArray<LevelEvent>;
   readonly trades: ReadonlyArray<Trade>;
   /** Repricing pairs drained this frame. */
@@ -73,11 +75,19 @@ export type Sampler = {
   readonly ingest: (input: FrameInput, t: number) => void;
   /** Produce a frame from the state already ingested, or nothing until both sides have a best. */
   readonly project: (geometry: SampleGeometry, t: number, dt: number) => FrameSample | undefined;
+  /** Forget everything: a different market has nothing in common with the last one. */
+  readonly reset: (scope: "coin") => void;
   /**
-   * Forget the ladder. `"grid"` (grouping/precision change) keeps the tape and
-   * touch trail, as v4's `resetLadder` does; `"coin"` forgets everything.
+   * Change the row step without forgetting the ladder's history.
+   *
+   * Grouping is a display choice, and the tape, the touch trail and the level
+   * trails all outlive it. The level history is carried across by
+   * `LevelHistory.regrid`: merged exactly when the step coarsens by a whole
+   * multiple, kept as bands when it does not.
+   *
+   * @param to - The new row step in raw ticks.
    */
-  readonly reset: (scope: "coin" | "grid") => void;
+  readonly regrid: (to: number) => void;
   /** True while anything is still animating. */
   readonly moving: () => boolean;
 };
@@ -99,6 +109,8 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
   // last projected scale is the right denominator: at most one sample old, and
   // frozen into the sample so it never moves again.
   let lastMaxSz = 0;
+  /** Row step the samples now in the store were taken at, learned from each ingest. */
+  let grid = 0;
   const live: Migration[] = [];
   const midTrail: MidSample[] = [];
   let lastTrade: FrameSample["lastTrade"];
@@ -106,8 +118,9 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
   let latest: { snapshot: BookSnapshot; engine: MetricSource | undefined } | undefined;
   let settlePending = false;
   return {
-    ingest: ({ snapshot, events, trades, settle, migrations, engine }, t) => {
+    ingest: ({ snapshot, gridTick, events, trades, settle, migrations, engine }, t) => {
       latest = { snapshot, engine };
+      grid = gridTick;
       if (settle) settlePending = true;
       if (migrations !== undefined && migrations.length > 0) live.push(...migrations);
       pruneMigrations(live, t);
@@ -130,7 +143,7 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
       // strict comparison drops every other sample, halving trail resolution.
       if (t - lastTrail >= TRAIL_DT) {
         lastTrail = t;
-        history.sampleTrails(t, lastMaxSz);
+        history.sampleTrails(t, lastMaxSz, grid);
         midTrail.push({ t, b: bb.px, a: aa.px, share: bb.sz + aa.sz > 0 ? bb.sz / (bb.sz + aa.sz) : 0.5 });
         pruneBefore(midTrail, t - TRAIL_MS);
       }
@@ -159,15 +172,17 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
       }
       const rows = Math.floor(geometry.height / ROW);
       const half = Math.floor(rows / 2);
-      const grid = geometry.gridTick;
-      if (Math.abs(mid - anchor.target) > grid * half * RECENTRE_FRACTION) {
+      // Rows are laid at the step the host asked for this frame; `grid` tracks
+      // what the store holds and is learned from the ingest.
+      const step = geometry.gridTick;
+      if (Math.abs(mid - anchor.target) > step * half * RECENTRE_FRACTION) {
         if (options.reducedMotion()) anchor.snap(mid);
         else anchor.target = mid;
       }
       const centre = anchor.step(dt);
       // Rows below zero are impossible prices; the top row is at least (rows − 1) grid steps so no row goes negative.
-      const top = Math.max((rows - 1) * grid, Math.round(centre / grid) * grid + half * grid);
-      const out = layRows(rows, top, grid, b, a, snapshot, history, t, engine);
+      const top = Math.max((rows - 1) * step, Math.round(centre / step) * step + half * step);
+      const out = layRows(rows, top, step, b, a, snapshot, history, t, engine);
       const midIdx = out.findIndex((r) => r.px < mid);
       const ribY = midIdx === -1 ? rows * ROW : midIdx * ROW;
       accumulate(out, midIdx, geometry.ruler);
@@ -209,18 +224,26 @@ export function createSampler(history: LevelHistory, tape: Tape, options: Sample
         lastTrade,
       };
     },
-    reset: (scope) => {
+    reset: () => {
       anchorSet = false;
       history.clear();
       lastTrail = -Infinity;
       latest = undefined;
       settlePending = false;
-      if (scope === "coin") {
-        tape.clear();
-        midTrail.length = 0;
-        live.length = 0;
-        lastTrade = undefined;
-      }
+      grid = 0;
+      tape.clear();
+      midTrail.length = 0;
+      live.length = 0;
+      lastTrade = undefined;
+    },
+    regrid: (to) => {
+      // The book is re-subscribed and arrives empty, so the ladder has nothing
+      // to project until the new snapshot lands. Everything that is history —
+      // tape, touch trail, level trails — is kept: the market did not change,
+      // only the size of a row.
+      history.regrid(grid, to);
+      grid = to;
+      latest = undefined;
     },
     moving: () => anchor.moving || history.moving(),
   };
@@ -266,6 +289,9 @@ function layRows(
       // By price, not by side: a swept price or one inside the spread still has
       // a past, and the row is the only place it can be shown.
       trail: history.trailAt(px),
+      // A coarser past covering this row, left by a grouping change; empty
+      // once the window has aged past it.
+      band: history.bandAt(px),
     });
   }
   return out;

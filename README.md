@@ -44,6 +44,8 @@ A level that changes does not simply redraw. It pulses by _kind_: an outline for
 
 The left column is sixty seconds of history for every visible level: one tile per sample, coloured by that level's size at the time. A level that has been sitting there for ten seconds looks nothing like one that appeared 400 ms ago.
 
+Changing the grouping does not erase it. Coarsening merges the finer history into the new rows exactly; going finer keeps the coarser history as a block spanning the band of prices it covered, because nothing ever recorded how the depth was spread inside that bucket. For a minute after a change the column shows the old grouping on the left and the new one on the right.
+
 Drawn over it are the bid and ask touch paths — where the best bid and best ask have actually been — with a white dot at each print and a price tag at the right edge. The tag prints only when the real BBO is known: after a grouping change the engine keeps the true touch rather than showing an aggregated price that would look precise and be wrong.
 
 ### Metric overlays
@@ -219,10 +221,10 @@ Measured on AMD Ryzen 7 4700U with Radeon Graphics (8 cores), Node v26.8.1, 2026
 
 | Synthetic rate | Sustained | apply p50 | apply p99 | Heap delta |
 | --- | --- | --- | --- | --- |
-| 1,000/s (33x live) | 84,832/s | 4.33 us | 76.48 us | -10.9 MB |
-| 10,000/s (333x live) | 97,235/s | 3.42 us | 63.42 us | 14.6 MB |
-| 50,000/s (1667x live) | 48,246/s | 3.77 us | 173.84 us | 22.9 MB |
-| 100,000/s (3333x live) | 31,156/s | 3.77 us | 307.23 us | 135.6 MB |
+| 1,000/s (33x live) | 80,139/s | 4.33 us | 88.8 us | -11.1 MB |
+| 10,000/s (333x live) | 97,709/s | 3.35 us | 66.3 us | 15.2 MB |
+| 50,000/s (1667x live) | 49,089/s | 3.35 us | 178.44 us | 14.8 MB |
+| 100,000/s (3333x live) | 33,395/s | 3.35 us | 292.4 us | 136.5 MB |
 
 **Render — emulated.** The widget replaying `btc-perp-active.jsonl.gz` at speed 1 in headless Chromium, telemetry read from its own HUD.
 
@@ -230,6 +232,6 @@ Scope: two viewports at the 60 fps cadence, sampled for 15 s after a 5 s warm-up
 
 | Viewport | fps | frame p50 | frame p95 |
 | --- | --- | --- | --- |
-| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 3.3 ms | 4.2 ms |
+| desktop 1500x820 DPR 1, 60 fps cap | 60 fps | 3 ms | 4 ms |
 | phone 390x844 DPR 3, 60 fps cap | 60 fps | 1.1 ms | 1.4 ms |
 <!-- bench:end -->

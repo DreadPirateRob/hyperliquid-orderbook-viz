@@ -21,7 +21,7 @@ function book(bids: ReadonlyArray<Level>, asks: ReadonlyArray<Level>, version = 
 }
 const geometry = { height: ROW * 10, gridTick: 10, ruler: 3 };
 function input(snapshot: BookSnapshot): FrameInput {
-  return { snapshot, events: [], trades: [], settle: false };
+  return { snapshot, gridTick: 10, events: [], trades: [], settle: false };
 }
 function sampler(reducedMotion = false) {
   return createSampler(createLevelHistory({ reducedMotion: () => reducedMotion }), createTape(), {
@@ -135,7 +135,7 @@ describe("sampler with motion", () => {
     let snap = book([lvl(1000, 8)], [lvl(1010, 1)]);
     let f = sample(
       s,
-      { snapshot: snap, events: [ev("added", 1000, 0, 8)], trades: [], settle: false },
+      { snapshot: snap, gridTick: 10, events: [ev("added", 1000, 0, 8)], trades: [], settle: false },
       geometry,
       0,
       0.016,
@@ -150,7 +150,7 @@ describe("sampler with motion", () => {
     snap = book([lvl(1030, 8), lvl(1000, 8)], [lvl(1040, 1)]);
     f = sample(
       s,
-      { snapshot: snap, events: [ev("added", 1030, 0, 8)], trades: [], settle: false },
+      { snapshot: snap, gridTick: 10, events: [ev("added", 1030, 0, 8)], trades: [], settle: false },
       geometry,
       2000,
       0.016,
@@ -168,7 +168,13 @@ describe("sampler with motion", () => {
     sample(s, input(snap), geometry, 0, 0.016);
     let f = sample(
       s,
-      { snapshot: snap, events: [], trades: [{ px: tick(1010), sz: 1, side: "B", time: 0 }], settle: false },
+      {
+        snapshot: snap,
+        gridTick: 10,
+        events: [],
+        trades: [{ px: tick(1010), sz: 1, side: "B", time: 0 }],
+        settle: false,
+      },
       geometry,
       100,
       0.016,
@@ -185,7 +191,7 @@ describe("settling and reduced motion", () => {
     const snap = book([lvl(1000, 8)], [lvl(1010, 1)]);
     const f = sample(
       s,
-      { snapshot: snap, events: [ev("added", 1000, 0, 8)], trades: [], settle: true },
+      { snapshot: snap, gridTick: 10, events: [ev("added", 1000, 0, 8)], trades: [], settle: true },
       geometry,
       0,
       0.016,
@@ -214,12 +220,14 @@ describe("trails and last trade", () => {
     const snap = book([lvl(1000, 4)], [lvl(1010, 6)]);
     let f = sample(
       s,
-      { snapshot: snap, events: [ev("added", 1000, 0, 4)], trades: [], settle: false },
+      { snapshot: snap, gridTick: 10, events: [ev("added", 1000, 0, 4)], trades: [], settle: false },
       geometry,
       0,
       0.016,
     );
-    expect(f?.rows.find((r) => r.px === 1000)?.trail).toEqual([{ t: 0, sz: 4, rel: 1, sat: SAT_FLOOR, side: "bid" }]);
+    expect(f?.rows.find((r) => r.px === 1000)?.trail).toEqual([
+      { t: 0, sz: 4, rel: 1, sat: SAT_FLOOR, side: "bid", g: 10 },
+    ]);
     expect(f?.midTrail).toEqual([{ t: 0, b: 1000, a: 1010, share: 0.4 }]);
     f = sample(s, input(snap), geometry, 200, 0.016);
     expect(f?.midTrail.length, "no new sample before 250 ms").toBe(1);
@@ -240,7 +248,7 @@ describe("trails and last trade", () => {
     const snap = book([lvl(1000, 4)], [lvl(1010, 6)]);
     let f = sample(
       s,
-      { snapshot: snap, events: [ev("added", 1000, 0, 4)], trades: [], settle: false },
+      { snapshot: snap, gridTick: 10, events: [ev("added", 1000, 0, 4)], trades: [], settle: false },
       geometry,
       0,
       0.016,
@@ -255,6 +263,7 @@ describe("trails and last trade", () => {
         s,
         {
           snapshot: book([lvl(1000, 4)], [lvl(1010, 400)]),
+          gridTick: 10,
           events: [ev("grew", 1010, 6, 400)],
           trades: [],
           settle: false,
@@ -277,13 +286,25 @@ describe("trails and last trade", () => {
   it("tracks the last print and its direction against the previous print", () => {
     const s = sampler();
     const snap = book([lvl(1000, 4)], [lvl(1010, 6)]);
-    let f = sample(s, { snapshot: snap, events: [], trades: [tr(1010, "B")], settle: false }, geometry, 0, 0.016);
+    let f = sample(
+      s,
+      { snapshot: snap, gridTick: 10, events: [], trades: [tr(1010, "B")], settle: false },
+      geometry,
+      0,
+      0.016,
+    );
     expect(f?.lastTrade).toEqual({ px: 1010, dir: 0 });
-    f = sample(s, { snapshot: snap, events: [], trades: [tr(1000, "A")], settle: false }, geometry, 16, 0.016);
+    f = sample(
+      s,
+      { snapshot: snap, gridTick: 10, events: [], trades: [tr(1000, "A")], settle: false },
+      geometry,
+      16,
+      0.016,
+    );
     expect(f?.lastTrade).toEqual({ px: 1000, dir: -1 });
     f = sample(
       s,
-      { snapshot: snap, events: [], trades: [tr(1000, "A"), tr(1010, "B")], settle: false },
+      { snapshot: snap, gridTick: 10, events: [], trades: [tr(1000, "A"), tr(1010, "B")], settle: false },
       geometry,
       32,
       0.016,
@@ -302,6 +323,7 @@ function withAskTrail(): { s: ReturnType<typeof sampler>; t: number } {
     s.ingest(
       {
         snapshot: book([lvl(1000, 5)], [lvl(1010, 8)]),
+        gridTick: 10,
         events: t === 0 ? [{ ...ev("added", 1010, 0, 8), side: "ask" }] : [],
         trades: [],
         settle: false,
@@ -325,7 +347,13 @@ describe("a price keeps its trail when the touch moves past it", () => {
     let t = t0;
     for (let k = 0; k < 4; k++, t += 250) {
       s.ingest(
-        { snapshot: book([lvl(1030, 6), lvl(1010, 4)], [lvl(1040, 7)]), events: [], trades: [], settle: false },
+        {
+          snapshot: book([lvl(1030, 6), lvl(1010, 4)], [lvl(1040, 7)]),
+          gridTick: 10,
+          events: [],
+          trades: [],
+          settle: false,
+        },
         t,
       );
       s.project(geometry, t, 0.016);
@@ -342,7 +370,10 @@ describe("a price keeps its trail when the touch moves past it", () => {
     const { s, t: t0 } = withAskTrail();
     let t = t0;
     for (let k = 0; k < 4; k++, t += 250) {
-      s.ingest({ snapshot: book([lvl(990, 4)], [lvl(1030, 7)]), events: [], trades: [], settle: false }, t);
+      s.ingest(
+        { snapshot: book([lvl(990, 4)], [lvl(1030, 7)]), gridTick: 10, events: [], trades: [], settle: false },
+        t,
+      );
       s.project(geometry, t, 0.016);
     }
     const row = s.project(geometry, t, 0.016)?.rows.find((r) => r.px === 1010);
@@ -355,9 +386,15 @@ describe("reset scope", () => {
   it("keeps the tape across a grouping change and clears it on a coin change", () => {
     const s = sampler();
     const snap = book([lvl(1000, 1)], [lvl(1010, 1)]);
-    let f = sample(s, { snapshot: snap, events: [], trades: [tr(1010, "B")], settle: false }, geometry, 0, 0.016);
+    let f = sample(
+      s,
+      { snapshot: snap, gridTick: 10, events: [], trades: [tr(1010, "B")], settle: false },
+      geometry,
+      0,
+      0.016,
+    );
     expect(f?.tape.length).toBe(1);
-    s.reset("grid");
+    s.regrid(20);
     f = sample(s, input(snap), geometry, 16, 0.016);
     expect(f?.tape.length, "v4 resetLadder keeps trades and tape").toBe(1);
     s.reset("coin");
@@ -389,7 +426,7 @@ describe("ingestion independent of painting", () => {
     // Three seconds of ingestion with a single paint at the end: exactly what
     // an idle book under the `on update` cadence, or a hidden tab, looks like.
     // One event creates the level entry; after that only time passes.
-    s.ingest({ snapshot: snap, events: [ev("added", 1000, 0, 1)], trades: [], settle: false }, 0);
+    s.ingest({ snapshot: snap, gridTick: 10, events: [ev("added", 1000, 0, 1)], trades: [], settle: false }, 0);
     for (let t = 250; t <= 3000; t += 250) s.ingest(input(snap), t);
     const f = s.project(geometry, 3000, 0.016);
     if (f === undefined) throw new Error("expected a frame");

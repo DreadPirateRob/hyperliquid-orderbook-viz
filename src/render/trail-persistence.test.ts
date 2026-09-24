@@ -13,7 +13,7 @@ import { drawLadder, ladderLayout } from "./ladder";
  * so this asserts the tiles are painted, not that the samples exist.
  */
 
-type Rect = { readonly x: number; readonly y: number; readonly w: number };
+type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
 function recordingContext(rects: Rect[]): CanvasRenderingContext2D {
   const ctx = {
@@ -24,8 +24,8 @@ function recordingContext(rects: Rect[]): CanvasRenderingContext2D {
     strokeStyle: "",
     lineWidth: 1,
     globalAlpha: 1,
-    fillRect(x: number, y: number, w: number) {
-      rects.push({ x, y, w });
+    fillRect(x: number, y: number, w: number, h: number) {
+      rects.push({ x, y, w, h });
     },
     strokeRect: () => {},
     beginPath: () => {},
@@ -71,7 +71,7 @@ const T = 100_000;
 /** A full window of tiles at one price, all of them worth drawing. */
 function trail(side: "bid" | "ask"): ReadonlyArray<TrailSample> {
   const out: TrailSample[] = [];
-  for (let k = 20; k >= 1; k--) out.push({ t: T - k * TRAIL_DT, sz: 5, rel: 0.6, sat: 1, side });
+  for (let k = 20; k >= 1; k--) out.push({ t: T - k * TRAIL_DT, sz: 5, rel: 0.6, sat: 1, side, g: 10 });
   return out;
 }
 
@@ -91,6 +91,7 @@ function row(i: number, o: RowOverrides): FrameRow {
     pulses: [],
     first: 0,
     trail: trail(o.side === "ask" ? "ask" : "bid"),
+    band: [],
     ...o,
   };
 }
@@ -170,5 +171,31 @@ describe("painted history outlives the liquidity that made it", () => {
     const swallowed = row(1, { px: tick(1000), side: "spread", shown: 0, live: 0 });
     const rows = [row(0, { px: tick(1010), side: "ask" }), swallowed, row(2, { px: tick(990), side: "bid" })];
     expect(tilesOn(draw(rows), swallowed).length, "a spread row still has a past").toBeGreaterThan(10);
+  });
+});
+
+describe("a coarser past is drawn as the band it covers", () => {
+  it("draws a covered run as one block spanning it, painted once", () => {
+    // The bucket held depth somewhere in these prices and nothing recorded
+    // where, so it is one block across the rows it covers — not a tile per
+    // row, which would both read as per-row depth and repaint the same
+    // history once per row.
+    const band = trail("bid");
+    const upperRow = row(1, { px: tick(1001), side: "bid", trail: [], band });
+    const lowerRow = row(2, { px: tick(1000), side: "bid", trail: [], band });
+    const rects = draw([row(0, { px: tick(1010), side: "ask", trail: [] }), upperRow, lowerRow]);
+    const block = tilesOn(rects, upperRow);
+    expect(block.length, "one tile per sample, not per sample per row").toBe(band.length);
+    expect(new Set(block.map((q) => q.h)), "spans both covered rows, full height").toEqual(new Set([2 * ROW]));
+    // Drawn once: the lower row contributes no band tiles of its own, it is
+    // inside the block the upper row started.
+    const startingBelow = tilesOn(rects, lowerRow).filter((q) => q.y >= lowerRow.y);
+    expect(startingBelow, "the covered row does not repaint the band").toEqual([]);
+  });
+
+  it("keeps present tiles inset so they never read as band history", () => {
+    const liveRow = row(1, { px: tick(1000), side: "bid", band: [] });
+    const tiles = tilesOn(draw([row(0, { px: tick(1010), side: "ask", trail: [] }), liveRow]), liveRow);
+    expect(new Set(tiles.map((q) => q.h)), "inset by 3 top and bottom").toEqual(new Set([ROW - 6]));
   });
 });

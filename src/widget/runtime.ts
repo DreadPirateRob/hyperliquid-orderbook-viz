@@ -164,7 +164,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
       const sameCoin = market?.coin === event.market.coin;
       market = event.market;
       engine.reset({ gridTick, scale, keepTouch: sameCoin });
-      sampler.reset(sameCoin ? "grid" : "coin");
+      if (sameCoin) sampler.regrid(gridTick);
+      else sampler.reset("coin");
       if (!sameCoin) lastFrame = undefined;
       applyWantedGrid();
       return;
@@ -226,6 +227,9 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     sampler.ingest(
       {
         snapshot: engine.snapshot(),
+        // The row step these events were produced under: it is stamped on every
+        // trail sample, so a later grouping change knows what the sample means.
+        gridTick,
         events: engine.drain(),
         trades: engine.drainTrades(),
         migrations: engine.drainMigrations(),
@@ -290,7 +294,7 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         gridTick = Grouping.gridTickFor(mid, market.precision, scale);
         groupLabel = groupOptions.find((o) => o.gridTick === gridTick)?.label ?? "–";
         engine.reset({ gridTick, scale, keepTouch: true });
-        sampler.reset("grid");
+        sampler.regrid(gridTick);
       }
     }
     // Grouping change: the old ladder freezes and dims, then the first post-ack

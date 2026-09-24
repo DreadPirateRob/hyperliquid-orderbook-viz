@@ -36,6 +36,13 @@ export type TrailSample = {
   readonly sat: number;
   /** Which side the level was on when sampled; fixes the tile's hue. */
   readonly side: "bid" | "ask";
+  /**
+   * Row step in force when the sample was taken, in raw ticks (0 before any
+   * grouping is known). A sample outlives the grouping that produced it, and
+   * an instant belongs to exactly one grid, so this is what lets a coarser
+   * past be told apart from the present grid rather than redrawn as it.
+   */
+  readonly g: number;
 };
 
 /** One sample of the touch: best bid/ask ticks and bid share at frame time `t`. */
@@ -67,8 +74,17 @@ export type FrameRow = {
   readonly pulses: ReadonlyArray<Pulse>;
   /** When the level first appeared, for persistence saturation. */
   readonly first: number;
-  /** Size over the trail window, oldest first. */
+  /** Size over the trail window at the current grid, oldest first. */
   readonly trail: ReadonlyArray<TrailSample>;
+  /**
+   * History taken at a coarser grid that covers this row's price, oldest
+   * first, and empty once the window has aged past the last grouping change.
+   *
+   * It is kept apart from `trail` because it says something weaker: what a
+   * band of prices held, not what this row held. The renderer draws it across
+   * the whole band it covers so it cannot be read as this row's depth.
+   */
+  readonly band: ReadonlyArray<TrailSample>;
 };
 
 /** The whole frame. */

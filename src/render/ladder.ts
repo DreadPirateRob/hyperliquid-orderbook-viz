@@ -1,5 +1,5 @@
 import * as Tick from "../domain/tick";
-import type { FrameRow, FrameSample, Pulse } from "../state/frame-sample.types";
+import type { FrameRow, FrameSample, Pulse, TrailSample } from "../state/frame-sample.types";
 import { ROW } from "../state/sampler";
 import { PERSISTENCE_MS, TRAIL_DT, TRAIL_MS } from "../state/trail";
 import type { PriceScale } from "../domain/tick";
@@ -161,6 +161,12 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
     ctx.fillStyle = rgba(PALETTE.white, 0.35);
     ctx.fillRect(0, hovered.y, 2, ROW);
   }
+  // Bands are the oldest thing on the canvas, so they go down first and
+  // everything else paints over them. Rows covered by one bucket share the
+  // very same sample array, so a run of them is one block drawn once: drawing
+  // it per row would repaint the same tiles ten deep on a $10 bucket over a
+  // $1 grid, which measured as dropped frames.
+  if (d.trailsOn) drawBands(ctx, S, X);
   for (const row of S.rows) {
     const y = row.y;
     const cy = y + ROW / 2;
@@ -292,7 +298,16 @@ function drawMigrations(ctx: CanvasRenderingContext2D, S: FrameSample, X: Ladder
   }
 }
 
-/** v4 `trailStrip`: one tile per sample, positioned by time so the strip glides; fill dots at trade times. */
+/**
+ * v4 `trailStrip`: one tile per sample, positioned by time so the strip
+ * glides; fill dots at trade times.
+ *
+ * Coarser history left by a grouping change (`row.band`) is drawn first and at
+ * full row height. Consecutive rows then join into one unbroken block spanning
+ * the band the bucket covered, which is the only honest reading of it: that
+ * much depth stood somewhere in those prices, and nothing recorded where.
+ * Per-row tiles keep their inset, so present and past never read alike.
+ */
 function trailStrip(
   ctx: CanvasRenderingContext2D,
   row: FrameRow,
@@ -303,31 +318,16 @@ function trailStrip(
 ): void {
   // No early return for a spread row: a price swallowed by a widening spread
   // still has a past, and blanking it loses the very moment worth seeing.
+  //
   // Tile pitch. The floor keeps a tile visible when the pitch is sub-pixel;
   // it must stay under the pitch or every tile overdraws its neighbour and the
   // strip composites into a denser band than any of its samples. At the 60 s
   // window the pitch is 0.96 px at the narrowest trail column, so the floor is
   // 1 px: tiles meet, and none is painted twice.
-  const cw = (w * TRAIL_DT) / TRAIL_MS;
-  const x1 = x0 + w;
-  for (const s of row.trail) {
-    const x = trailX(s.t, S.t, x0, w);
-    if (x < x0) continue;
-    // Shading is read from the sample, never recomputed: the trail is history,
-    // and a past tile must not change colour because the present frame's
-    // largest level changed. Deviation from v4, recorded in ADR 0009.
-    const { rel, sat } = s;
-    if (rel <= 0) continue;
-    const cx0 = Math.max(x0, x);
-    const cx1 = Math.min(x1, x + Math.max(1, cw));
-    if (cx1 <= cx0) continue;
-    // dimmed so the bid/ask paths keep ≥ 3:1 contrast over tiles
-    // Hue comes from the sample's own side, not the row's: after a sweep the
-    // row is on the other side, but what happened there happened on the side it
-    // was on at the time.
-    ctx.fillStyle = rgba(rel > 0.85 ? PALETTE.hot : sideColour(s.side), (0.06 + 0.42 * rel ** 0.7) * sat);
-    ctx.fillRect(cx0, y + 3, cx1 - cx0, ROW - 6);
-  }
+  const strip = { x0, x1: x0 + w, w, cw: (w * TRAIL_DT) / TRAIL_MS, now: S.t };
+  // Bands are not drawn here: they span rows, so `drawBands` lays them down
+  // once, beneath everything, before the row loop starts.
+  for (const s of row.trail) tile(ctx, s, strip, y, ROW - 6, 3);
   for (const p of row.pulses) {
     if (p.kind !== "fill") continue;
     const x = trailX(p.t0, S.t, x0, w);
@@ -336,6 +336,76 @@ function trailStrip(
     ctx.arc(x, y + ROW / 2, 2.5, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+/**
+ * Paint the coarser history left by a grouping change, one block per bucket.
+ *
+ * Every row a bucket covers carries the identical sample array, by identity,
+ * so a run of rows sharing one is that bucket's band and is drawn as a single
+ * block spanning them: full height, no inset, no seams. That is both the
+ * honest reading — the depth stood somewhere in those prices and nothing
+ * recorded where — and the cheap one, since the alternative repaints the same
+ * tiles once per row covered.
+ *
+ * @param ctx - Canvas context.
+ * @param S - The frame sample.
+ * @param X - Column layout.
+ */
+function drawBands(ctx: CanvasRenderingContext2D, S: FrameSample, X: LadderLayout): void {
+  const strip = { x0: X.trail, x1: X.trail + X.trailW, w: X.trailW, cw: (X.trailW * TRAIL_DT) / TRAIL_MS, now: S.t };
+  let i = 0;
+  while (i < S.rows.length) {
+    const row = S.rows[i];
+    if (row === undefined || row.band.length === 0) {
+      i++;
+      continue;
+    }
+    let end = i + 1;
+    while (S.rows[end]?.band === row.band) end++;
+    const h = (end - i) * ROW;
+    for (const s of row.band) tile(ctx, s, strip, row.y, h, 0);
+    i = end;
+  }
+}
+
+/** Where the trail column is and how wide one sample's tile is, fixed for a whole strip. */
+type Strip = {
+  readonly x0: number;
+  readonly x1: number;
+  readonly w: number;
+  /** Tile pitch: the column width one sampling period occupies. */
+  readonly cw: number;
+  readonly now: number;
+};
+
+/**
+ * Paint one trail sample, clipped to the column.
+ *
+ * @param ctx - Canvas context.
+ * @param s - The sample.
+ * @param strip - Column geometry.
+ * @param y - Row top in CSS px.
+ * @param h - Tile height: the full row for a band, inset for a per-row tile.
+ * @param inset - Offset from the row top.
+ */
+function tile(ctx: CanvasRenderingContext2D, s: TrailSample, strip: Strip, y: number, h: number, inset: number): void {
+  const x = trailX(s.t, strip.now, strip.x0, strip.w);
+  if (x < strip.x0) return;
+  // Shading is read from the sample, never recomputed: the trail is history,
+  // and a past tile must not change colour because the present frame's
+  // largest level changed. Deviation from v4, recorded in ADR 0009.
+  const { rel, sat } = s;
+  if (rel <= 0) return;
+  const cx0 = Math.max(strip.x0, x);
+  const cx1 = Math.min(strip.x1, x + Math.max(1, strip.cw));
+  if (cx1 <= cx0) return;
+  // dimmed so the bid/ask paths keep ≥ 3:1 contrast over tiles
+  // Hue comes from the sample's own side, not the row's: after a sweep the
+  // row is on the other side, but what happened there happened on the side it
+  // was on at the time.
+  ctx.fillStyle = rgba(rel > 0.85 ? PALETTE.hot : sideColour(s.side), (0.06 + 0.42 * rel ** 0.7) * sat);
+  ctx.fillRect(cx0, y + inset, cx1 - cx0, h);
 }
 
 /**
