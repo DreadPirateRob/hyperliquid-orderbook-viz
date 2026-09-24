@@ -165,58 +165,63 @@ export function drawLadder(d: DrawContext, S: FrameSample): void {
     const y = row.y;
     const cy = y + ROW / 2;
     const label = Tick.formatOnGrid(row.px, d.scale, d.gridTick);
+    const round = isRound(row.px, d.gridTick);
+    // The present frame decides what the row shows; it never decides what the
+    // row showed. Every branch below falls through to the trail strip, because
+    // an empty level and a swallowed price have exactly the history they had
+    // the frame before they emptied.
     if (row.side === "spread") {
       ctx.fillStyle = rgba(PALETTE.mid, 0.05);
       ctx.fillRect(0, y, W, ROW);
       text(ctx, label, X.px, cy, PALETTE.dim, "right");
-      continue;
-    }
-    const round = isRound(row.px, d.gridTick);
-    if (row.shown < 1e-6 && row.pulses.length === 0) {
+    } else if (row.shown < 1e-6 && row.pulses.length === 0) {
       text(ctx, label, X.px, cy, round ? PALETTE.text : PALETTE.dim, "right", 12, round);
-      continue;
-    }
-    const c = sideColour(row.side);
-    const h = heatColour(row, row.side, S.maxSz, S.t);
-    ctx.globalAlpha = row.inRuler ? 1 : RULER_DIM;
-    ctx.fillStyle = rgba(h.c, h.a);
-    ctx.fillRect(X.heat, y + 2, 14, ROW - 4);
-    const w = (row.shown / S.maxSz) * X.blockW;
-    ctx.fillStyle = rgba(h.c, 0.22 + 0.5 * persistence(row, S.t));
-    ctx.fillRect(X.block, y + 3, w, ROW - 6);
-    const ps = pulseState(row.pulses, S.t);
-    if (ps.ghost > 0) {
-      ctx.fillStyle = rgba(c, 0.25 * ps.ghost);
-      ctx.fillRect(X.block + w, y + 3, Math.max(0, ((row.prev - row.live) / S.maxSz) * X.blockW), ROW - 6);
-    }
-    if (ps.add > 0) {
-      ctx.strokeStyle = rgba(PALETTE.white, 0.8 * ps.add);
-      ctx.lineWidth = 1;
-      ctx.strokeRect(X.block + 0.5, y + 3.5, Math.max(w, 2), ROW - 7);
-    }
-    if (ps.fill > 0) {
-      ctx.fillStyle = rgba(PALETTE.white, 0.55 * ps.fill);
-      ctx.fillRect(X.heat - 6, y + 2, 4, ROW - 4);
-      ctx.fillStyle = rgba(PALETTE.hot, 0.35 * ps.fill);
-      ctx.fillRect(0, y, W, ROW);
-    }
-    if (ps.grew > 0) {
-      ctx.fillStyle = rgba(c, 0.12 * ps.grew);
-      ctx.fillRect(X.block, y, X.blockW, ROW);
-    }
-    if (d.overlaysOn) drawRowOverlays(ctx, row, X, S, d);
-    text(ctx, label, X.px, cy, round ? PALETTE.text : rgba(c, 0.9), "right", 12, round);
-    if (d.trailsOn) {
-      const lx = X.block + w + 6;
-      const lbl = formatSize(row.shown);
-      ctx.font = `11px ${FONT}`;
-      const tw = ctx.measureText(lbl).width;
-      ctx.fillStyle = "#0b0e11cc";
-      ctx.fillRect(lx - 2, y + 5, tw + 4, ROW - 10);
-      text(ctx, lbl, lx, cy, PALETTE.text, "left", 11);
-      trailStrip(ctx, row, X.trail, X.trailW, y, S);
     } else {
-      text(ctx, formatSize(row.shown), X.size, cy, PALETTE.text, "right");
+      const c = sideColour(row.side);
+      const h = heatColour(row, row.side, S.maxSz, S.t);
+      ctx.globalAlpha = row.inRuler ? 1 : RULER_DIM;
+      ctx.fillStyle = rgba(h.c, h.a);
+      ctx.fillRect(X.heat, y + 2, 14, ROW - 4);
+      const w = (row.shown / S.maxSz) * X.blockW;
+      ctx.fillStyle = rgba(h.c, 0.22 + 0.5 * persistence(row, S.t));
+      ctx.fillRect(X.block, y + 3, w, ROW - 6);
+      const ps = pulseState(row.pulses, S.t);
+      if (ps.ghost > 0) {
+        ctx.fillStyle = rgba(c, 0.25 * ps.ghost);
+        ctx.fillRect(X.block + w, y + 3, Math.max(0, ((row.prev - row.live) / S.maxSz) * X.blockW), ROW - 6);
+      }
+      if (ps.add > 0) {
+        ctx.strokeStyle = rgba(PALETTE.white, 0.8 * ps.add);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(X.block + 0.5, y + 3.5, Math.max(w, 2), ROW - 7);
+      }
+      if (ps.fill > 0) {
+        ctx.fillStyle = rgba(PALETTE.white, 0.55 * ps.fill);
+        ctx.fillRect(X.heat - 6, y + 2, 4, ROW - 4);
+        ctx.fillStyle = rgba(PALETTE.hot, 0.35 * ps.fill);
+        ctx.fillRect(0, y, W, ROW);
+      }
+      if (ps.grew > 0) {
+        ctx.fillStyle = rgba(c, 0.12 * ps.grew);
+        ctx.fillRect(X.block, y, X.blockW, ROW);
+      }
+      if (d.overlaysOn) drawRowOverlays(ctx, row, X, S, d);
+      text(ctx, label, X.px, cy, round ? PALETTE.text : rgba(c, 0.9), "right", 12, round);
+      if (d.trailsOn) {
+        const lx = X.block + w + 6;
+        const lbl = formatSize(row.shown);
+        ctx.font = `11px ${FONT}`;
+        const tw = ctx.measureText(lbl).width;
+        ctx.fillStyle = "#0b0e11cc";
+        ctx.fillRect(lx - 2, y + 5, tw + 4, ROW - 10);
+        text(ctx, lbl, lx, cy, PALETTE.text, "left", 11);
+      } else {
+        text(ctx, formatSize(row.shown), X.size, cy, PALETTE.text, "right");
+      }
+    }
+    if (d.trailsOn) {
+      ctx.globalAlpha = row.inRuler ? 1 : RULER_DIM;
+      trailStrip(ctx, row, X.trail, X.trailW, y, S);
     }
     ctx.globalAlpha = 1;
   }
