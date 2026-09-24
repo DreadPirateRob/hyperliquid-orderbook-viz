@@ -55,8 +55,12 @@ A trail is the record of what happened at a **price**, so it is stored per price
 
 Each sample records the side it was taken on, and the renderer colours the tile from that rather than from the row. A sweep therefore leaves a legible seam — ask-coloured history above bid-coloured history at the same price — instead of repainting the past in the new side's colour, which would undo the freeze decision recorded above. Spread rows draw their trail for the same reason: the moment a level is swallowed is the moment most worth seeing.
 
-## Amendment (Trail window is 30 s, not v4's 12 s)
+## Amendment (Trail window is 60 s, not v4's 12 s)
 
-Twelve seconds shows a sweep or its aftermath, rarely both. Thirty holds the excursion and the recovery in one view, which is the span worth reading when the question is "what happened at this price".
+Twelve seconds shows a sweep or its aftermath, rarely both. Sixty holds the excursion, the refill and the quoting that settles afterwards in one view, which is the span worth reading when the question is "what happened at this price".
 
-The window is the only constant that changes: sampling stays at `TRAIL_DT`, so a level now retains 120 samples instead of 48, and a tile is `w / 120` of the trail column. Measured across the widths that show trails at all (the column is dropped below 900 px), a tile is 5.25 px at 1500 px, 3.42 px at 1280 px, and 1.92 px at the 900 px breakpoint itself — the only width where it falls under the 2 px floor `trailStrip` enforces, and a 4 % overlap there is not worth a second constant.
+Sampling stays at `TRAIL_DT`, so a level retains 240 samples instead of 48 and a tile is `w / 240` of the trail column. Measured across the widths that show trails at all (the column is dropped below 900 px): 2.62 px at 1500, 1.71 px at 1280, 1.79 px at 1100 where the tape's 200 px is returned to the ladder, and 0.96 px at the 900 px breakpoint itself.
+
+That forced a second constant after all. `trailStrip` floored a tile at 2 px, which was under the pitch at 30 s and is now above it at every width but 1500: at 900 px each column would be covered by ~2.1 tiles, and since tiles are drawn with alpha the strip would composite into a band denser than any sample in it — history made up out of overlap. The floor is therefore 1 px, under the pitch everywhere, so tiles meet without overdrawing. The floor exists only to keep a sub-pixel tile visible, so lowering it costs nothing.
+
+The window stays under `DEAD_MS` (60 s) only by coincidence of equality, and nothing depends on the relation: entries hold live animation state per side, while trails are stored per price and pruned solely by `TRAIL_MS`. An evicted entry stops contributing new samples, which for a level at zero were `rel: 0` and drew nothing.

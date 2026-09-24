@@ -1,11 +1,15 @@
 /**
  * Trails keep this much history; render and state map time with the same
- * window. v4 used 12 s; 30 s covers a sweep and its aftermath in one view,
- * which is the span worth reading. At `TRAIL_DT` that is 120 samples per level
- * and a tile every `w / 120` px, still above the 2 px floor `trailStrip`
- * enforces at the widths the trail column is given.
+ * window. v4 used 12 s; 60 s holds a sweep, its refill and the quoting that
+ * follows in one view, which is the span worth reading when the question is
+ * "what happened at this price".
+ *
+ * At `TRAIL_DT` that is 240 samples per level, so a tile is `w / 240` of the
+ * trail column: 2.62 px at 1500, 1.71 px at 1280, 0.96 px at the 900 px
+ * breakpoint where the column is narrowest. `trailStrip` floors a tile at
+ * 1 px, under the pitch at every width, so tiles meet without overdrawing.
  */
-export const TRAIL_MS = 30_000;
+export const TRAIL_MS = 60_000;
 /** Trail sampling period (v4 `TRAIL_DT`). */
 export const TRAIL_DT = 250;
 

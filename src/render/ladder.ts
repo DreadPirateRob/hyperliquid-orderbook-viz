@@ -303,6 +303,11 @@ function trailStrip(
 ): void {
   // No early return for a spread row: a price swallowed by a widening spread
   // still has a past, and blanking it loses the very moment worth seeing.
+  // Tile pitch. The floor keeps a tile visible when the pitch is sub-pixel;
+  // it must stay under the pitch or every tile overdraws its neighbour and the
+  // strip composites into a denser band than any of its samples. At the 60 s
+  // window the pitch is 0.96 px at the narrowest trail column, so the floor is
+  // 1 px: tiles meet, and none is painted twice.
   const cw = (w * TRAIL_DT) / TRAIL_MS;
   const x1 = x0 + w;
   for (const s of row.trail) {
@@ -314,7 +319,7 @@ function trailStrip(
     const { rel, sat } = s;
     if (rel <= 0) continue;
     const cx0 = Math.max(x0, x);
-    const cx1 = Math.min(x1, x + Math.max(2, cw));
+    const cx1 = Math.min(x1, x + Math.max(1, cw));
     if (cx1 <= cx0) continue;
     // dimmed so the bid/ask paths keep ≥ 3:1 contrast over tiles
     // Hue comes from the sample's own side, not the row's: after a sweep the
